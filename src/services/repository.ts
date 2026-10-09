@@ -2,20 +2,24 @@ import { collection, doc, getDocFromServer, getDocFromCache, getDocsFromServer, 
 import { database } from './firebase'
 import { emptyRecords, fail, type Records } from '../domain/model'
 import { validateRecords } from '../domain/validation'
+import { backupRecords, type Backup } from '../domain/backup'
 export interface Head { activeDatasetId: string; revision: number }
 export interface Loaded { records: Records; head: Head; cached: boolean }
 const kinds = ['qualifications', 'examAttempts', 'acquisitions'] as const
 const equal = (a: Head, b: Head) => a.activeDatasetId === b.activeDatasetId && a.revision === b.revision
 const clean = (value: unknown): DocumentData => JSON.parse(JSON.stringify(value))
 export class Repository {
-  constructor(readonly uid: string) {}
-  private user() { return doc(database(), 'users', this.uid) }
-  private set(id: string) { return doc(database(), 'users', this.uid, 'datasets', id) }
+  constructor(readonly uid: string, private readonly firestore = database()) {}
+  private user() { return doc(this.firestore, 'users', this.uid) }
+  private set(id: string) { return doc(this.firestore, 'users', this.uid, 'datasets', id) }
   private rows(id: string, kind: typeof kinds[number]) { return collection(this.set(id), kind) }
   private counts(r: Records) { return { qualifications: r.qualifications.length, acquisitions: r.acquisitions.length, examAttempts: r.examAttempts.length } }
+  async replaceBackup(expected: Head, backup: Backup, progress: (message: string) => void = () => {}) {
+    await this.replace(expected, backupRecords(backup), progress)
+  }
   async initialize() {
     const id = crypto.randomUUID()
-    await runTransaction(database(), async tx => {
+    await runTransaction(this.firestore, async tx => {
       if ((await tx.get(this.user())).exists()) return
       tx.set(this.set(id), { status: 'ready', createdAt: new Date().toISOString(), counts: this.counts(emptyRecords()) })
       tx.set(this.user(), { activeDatasetId: id, revision: 0 })
@@ -58,7 +62,7 @@ export class Repository {
     if (!changes.length) return
     // Large cascades use prepare-and-switch to avoid transaction/rules access limits.
     if (changes.length > 6) { await this.replace(before.head, next); return }
-    await runTransaction(database(), async tx => {
+    await runTransaction(this.firestore, async tx => {
       const root = await tx.get(this.user())
       const meta = await tx.get(this.set(before.head.activeDatasetId))
       if (!root.exists() || !equal(before.head, root.data() as Head)) fail('別の端末で更新されました。画面を更新して変更内容を再確認してください。')
@@ -75,7 +79,7 @@ export class Repository {
   async replace(expected: Head, records: Records, progress: (message: string) => void = () => {}) {
     validateRecords(records)
     const id = crypto.randomUUID()
-    await runTransaction(database(), async tx => {
+    await runTransaction(this.firestore, async tx => {
       const root = await tx.get(this.user())
       if (!root.exists() || !equal(expected, root.data() as Head)) fail('既存記録が変更されています。更新して復元をやり直してください。')
       tx.set(this.set(id), { status: 'building', createdAt: new Date().toISOString(), counts: this.counts(records) })
@@ -83,7 +87,7 @@ export class Repository {
     for (const kind of kinds) for (let offset = 0; offset < records[kind].length; offset += 4) {
       const batch = records[kind].slice(offset, offset + 4)
       progress(`${kind}：${Math.min(offset + 4, records[kind].length)} / ${records[kind].length}件を準備中`)
-      await runTransaction(database(), async tx => {
+      await runTransaction(this.firestore, async tx => {
         const meta = await tx.get(this.set(id))
         if (!meta.exists() || meta.data().status !== 'building') fail('復元準備が中断されました。')
         for (const row of batch) { const { id: _id, ...body } = clean(row); tx.set(doc(this.rows(id, kind), row.id), body) }
@@ -104,7 +108,7 @@ export class Repository {
     if (normalize(verified) !== normalize(records)) fail('保存した内容が一致しません。既存記録は切り替えていません。')
     progress('記録を切り替えています。')
     try {
-      await runTransaction(database(), async tx => {
+      await runTransaction(this.firestore, async tx => {
         const root = await tx.get(this.user())
         const meta = await tx.get(this.set(id))
         if (!root.exists() || !equal(expected, root.data() as Head)) fail('復元準備中に既存記録が変更されました。既存記録を維持しています。')
@@ -128,20 +132,20 @@ export class Repository {
     if (!root.exists()) return
     for (const item of sets.docs) {
       if (item.id === root.data().activeDatasetId || (item.data().status !== 'retired' && Date.parse(item.data().createdAt) >= Date.now() - 86400000)) continue
-      await runTransaction(database(), async tx => {
+      await runTransaction(this.firestore, async tx => {
         const current = await tx.get(this.user())
         if (current.data()?.activeDatasetId === item.id) fail('有効な保存領域は削除できません。')
         tx.update(item.ref, { status: 'retired' })
       })
       for (const kind of ['acquisitions', 'examAttempts', 'qualifications'] as const) {
         const rows = await getDocsFromServer(this.rows(item.id, kind))
-        for (let offset = 0; offset < rows.docs.length; offset += 6) await runTransaction(database(), async tx => {
+        for (let offset = 0; offset < rows.docs.length; offset += 6) await runTransaction(this.firestore, async tx => {
           const current = await tx.get(this.user())
           if (current.data()?.activeDatasetId === item.id) fail('有効な保存領域は削除できません。')
           rows.docs.slice(offset, offset + 6).forEach(row => tx.delete(row.ref))
         })
       }
-      await runTransaction(database(), async tx => {
+      await runTransaction(this.firestore, async tx => {
         const current = await tx.get(this.user())
         if (current.data()?.activeDatasetId === item.id) fail('有効な保存領域は削除できません。')
         tx.delete(item.ref)
