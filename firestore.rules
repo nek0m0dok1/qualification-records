@@ -1,0 +1,85 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function owner(uid) { return request.auth != null && request.auth.uid == uid && request.auth.token.email_verified == true; }
+    function identifier(id) { return id is string && id.matches('[A-Za-z0-9_-]{1,128}'); }
+    function date(value, allowDay) {
+      return value is string
+        && value.matches(allowDay ? '[0-9]{4}-[0-9]{2}(-[0-9]{2})?' : '[0-9]{4}-[0-9]{2}')
+        && int(value.split('-')[0]) >= 1
+        && int(value.split('-')[1]) >= 1 && int(value.split('-')[1]) <= 12
+        && (value.size() == 7 || validDay(value));
+    }
+    function validDay(value) {
+      let parts = value.split('-');
+      let y = int(parts[0]); let m = int(parts[1]); let d = int(parts[2]);
+      let leap = y % 4 == 0 && (y % 100 != 0 || y % 400 == 0);
+      let days = m == 2 ? (leap ? 29 : 28) : (m in [4,6,9,11] ? 30 : 31);
+      return d >= 1 && d <= days;
+    }
+    function head(uid) { return getAfter(/databases/$(database)/documents/users/$(uid)).data; }
+    function dataset(uid, sid) { return getAfter(/databases/$(database)/documents/users/$(uid)/datasets/$(sid)).data; }
+    function writable(uid, sid) {
+      let status = dataset(uid, sid).status;
+      return status == 'building' || (status == 'ready' && head(uid).activeDatasetId == sid
+        && head(uid).revision == get(/databases/$(database)/documents/users/$(uid)).data.revision + 1);
+    }
+    function removable(uid, sid) { return dataset(uid,sid).status == 'retired' && head(uid).activeDatasetId != sid; }
+    function counts(c) { return c is map && c.keys().hasOnly(['qualifications','acquisitions','examAttempts']) && c.keys().hasAll(['qualifications','acquisitions','examAttempts']) && c.qualifications is int && c.qualifications >= 0 && c.acquisitions is int && c.acquisitions >= 0 && c.examAttempts is int && c.examAttempts >= 0; }
+    function qualification(d) {
+      return d.keys().hasOnly(['name','gradeOrCategory','fixedTagIds','memo']) && d.keys().hasAll(['name','gradeOrCategory','fixedTagIds','memo'])
+        && d.name is string && d.name.size() > 0 && d.name.size() <= 200 && d.name.matches('.*[^ \\t\\r\\n].*')
+        && d.gradeOrCategory is string && d.gradeOrCategory.size() <= 100 && d.memo is string && d.memo.size() <= 5000
+        && d.fixedTagIds is list && d.fixedTagIds.size() <= 9 && d.fixedTagIds.toSet().size() == d.fixedTagIds.size()
+        && d.fixedTagIds.hasOnly(['language','it','business-finance','law-public','industry','health-welfare','education-childcare','life-culture','other']);
+    }
+    function qualificationExists(uid,sid,qid) { return identifier(qid) && existsAfter(/databases/$(database)/documents/users/$(uid)/datasets/$(sid)/qualifications/$(qid)); }
+    function passed(uid,sid,qid,id) { return identifier(id) && getAfter(/databases/$(database)/documents/users/$(uid)/datasets/$(sid)/examAttempts/$(id)).data.qualificationId == qid && getAfter(/databases/$(database)/documents/users/$(uid)/datasets/$(sid)/examAttempts/$(id)).data.result == 'passed'; }
+    function renewal(r,uid,sid,qid,month) { return r is map && r.keys().hasOnly(['month','attemptId']) && r.keys().hasAll(['month']) && date(r.month,false) && r.month >= month && (!('attemptId' in r) || passed(uid,sid,qid,r.attemptId)); }
+    function acquisition(d,uid,sid,id) {
+      return d.keys().hasOnly(['qualificationId','acquiredMonth','acquiredAttemptId','renewal','previousRenewal']) && d.keys().hasAll(['qualificationId','acquiredMonth'])
+        && d.qualificationId == id && qualificationExists(uid,sid,id) && date(d.acquiredMonth,false)
+        && (!('acquiredAttemptId' in d) || passed(uid,sid,id,d.acquiredAttemptId))
+        && (!('renewal' in d) || renewal(d.renewal,uid,sid,id,d.acquiredMonth))
+        && (!('previousRenewal' in d) || ('renewal' in d && renewal(d.previousRenewal,uid,sid,id,d.acquiredMonth)));
+    }
+    function unlinked(uid,sid,qid,id) {
+      let path = /databases/$(database)/documents/users/$(uid)/datasets/$(sid)/acquisitions/$(qid);
+      return !existsAfter(path) || (
+        (!('acquiredAttemptId' in getAfter(path).data) || getAfter(path).data.acquiredAttemptId != id)
+        && (!('renewal' in getAfter(path).data) || !('attemptId' in getAfter(path).data.renewal) || getAfter(path).data.renewal.attemptId != id)
+        && (!('previousRenewal' in getAfter(path).data) || !('attemptId' in getAfter(path).data.previousRenewal) || getAfter(path).data.previousRenewal.attemptId != id));
+    }
+    match /users/{uid} {
+      allow read: if owner(uid);
+      allow create: if owner(uid) && request.resource.data.keys().hasOnly(['activeDatasetId','revision']) && request.resource.data.revision == 0 && identifier(request.resource.data.activeDatasetId) && dataset(uid,request.resource.data.activeDatasetId).status == 'ready';
+      allow update: if owner(uid) && request.resource.data.keys().hasOnly(['activeDatasetId','revision']) && identifier(request.resource.data.activeDatasetId) && request.resource.data.revision is int && request.resource.data.revision == resource.data.revision + 1 && dataset(uid,request.resource.data.activeDatasetId).status == 'ready';
+      allow delete: if false;
+      match /datasets/{sid} {
+        allow read: if owner(uid);
+        allow create: if owner(uid) && identifier(sid) && request.resource.data.keys().hasOnly(['status','createdAt','counts']) && request.resource.data.createdAt is string && counts(request.resource.data.counts) && (request.resource.data.status == 'building' || (request.resource.data.status == 'ready' && head(uid).activeDatasetId == sid));
+        allow update: if owner(uid) && request.resource.data.keys().hasOnly(['status','createdAt','counts']) && request.resource.data.createdAt == resource.data.createdAt && counts(request.resource.data.counts) && (
+          (request.resource.data.status == 'ready' && head(uid).activeDatasetId == sid && head(uid).revision == get(/databases/$(database)/documents/users/$(uid)).data.revision + 1)
+          || (request.resource.data.status == 'retired' && head(uid).activeDatasetId != sid));
+        allow delete: if owner(uid) && head(uid).activeDatasetId != sid && resource.data.status == 'retired';
+        match /qualifications/{id} {
+          allow read: if owner(uid);
+          allow create, update: if owner(uid) && identifier(id) && writable(uid,sid) && qualification(request.resource.data);
+          allow delete: if owner(uid) && (removable(uid,sid) || (writable(uid,sid) && !existsAfter(/databases/$(database)/documents/users/$(uid)/datasets/$(sid)/acquisitions/$(id))));
+        }
+        match /examAttempts/{id} {
+          allow read: if owner(uid);
+          allow create, update: if owner(uid) && identifier(id) && writable(uid,sid) && request.resource.data.keys().hasOnly(['qualificationId','examDate','result']) && request.resource.data.keys().hasAll(['qualificationId','examDate','result']) && qualificationExists(uid,sid,request.resource.data.qualificationId) && date(request.resource.data.examDate,true) && request.resource.data.result in ['passed','failed','pending']
+            && (request.resource.data.result == 'passed' || unlinked(uid,sid,request.resource.data.qualificationId,id))
+            && (resource == null || request.resource.data.qualificationId == resource.data.qualificationId);
+          allow delete: if owner(uid) && (removable(uid,sid) || (writable(uid,sid) && unlinked(uid,sid,resource.data.qualificationId,id)));
+        }
+        match /acquisitions/{id} {
+          allow read: if owner(uid);
+          allow create, update: if owner(uid) && identifier(id) && writable(uid,sid) && acquisition(request.resource.data,uid,sid,id);
+          allow delete: if owner(uid) && (removable(uid,sid) || writable(uid,sid));
+        }
+      }
+    }
+  }
+}
