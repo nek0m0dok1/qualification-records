@@ -1,0 +1,23 @@
+# ADR-000：技術選定一覧
+
+- フロントエンドフレームワーク: Vue 3
+- 開発言語: TypeScript
+- 開発・ビルドツール: Vite
+- 正式データの保存: Cloud Firestore
+- 認証: Firebase Authentication（メールアドレス・パスワード）
+- データのアクセス制御: Firestore Security Rules
+- オフラインデータ保存: Firestore永続キャッシュ
+- 検索・絞り込み・ソート: TypeScriptによる端末内処理
+- ジャンル分類: 固定タグ
+- バックアップ・復元形式: JSON
+- ホスティング: Firebase Hosting
+- Firebase料金プラン: Spark
+- ソースコード管理: GitHub
+- 自動検証・公開: GitHub Actions
+- 画面のオフライン対応: vite-plugin-pwa（Workbox／generateSW）
+- ページルーティング: Vue Router
+- ルート自動生成: Vue Routerのファイルベースルーティングプラグイン
+- テスト: Vitest、Playwright、Firebase Emulator Suite
+- 対応ブラウザー: PC Chrome・Edge、Android Chrome
+- 永続キャッシュ: 利用者が端末保存を選択した場合のみ
+- Git運用: mainと作業ブランチ。並行作業はプロジェクト内のgit worktreeを使用
