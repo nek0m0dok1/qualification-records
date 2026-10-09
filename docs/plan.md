@@ -104,6 +104,6 @@ Firestoreの保存領域を利用者ごとのデータセットに分け、有�
 
 ## 初回実装の進行状況
 
-初回実装では、Vue 3・TypeScript・Vite、Firebase Authentication・Cloud Firestore、画面、登録・訂正・削除、検索・絞り込み、JSON全置換、オフライン閲覧用のPWAシェルを実装した。型チェックとドメイン単体テストを実行する。Firebase実プロジェクトを接続した認証・保存、ブラウザー実機のオフライン動作、Firebase Emulator上のSecurity Rules検証は別途設定・検証が必要である。
+初回実装では、Vue 3・TypeScript・Vite、Firebase Authentication・Cloud Firestore、画面、登録・訂正・削除、検索・絞り込み、JSON全置換、オフライン閲覧用のPWAシェルを実装した。型チェック・ドメイン単体テスト7件・本番ビルドは成功した。本番ビルドにはFirestoreのチャンクサイズ警告がある。Firebase Emulator上のSecurity Rules検証はJavaが環境にないため未実施。Firebase実プロジェクトを接続した認証・保存とブラウザー実機のオフライン動作も、接続設定後に検証が必要である。
 
 ドメイン取得は保留し、Firebase Hostingの標準URLを使う。スライドは利用者が作成し、Codexは作成しない。初回実装の完了報告では、未実施の審査・コードレビューを実施済みと扱わない。
