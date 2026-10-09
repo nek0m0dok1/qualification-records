@@ -41,7 +41,10 @@ service cloud.firestore {
         && d.qualificationId == id && qualificationExists(uid,sid,id) && date(d.acquiredMonth,false)
         && (!('acquiredAttemptId' in d) || passed(uid,sid,id,d.acquiredAttemptId))
         && (!('renewal' in d) || renewal(d.renewal,uid,sid,id,d.acquiredMonth))
-        && (!('previousRenewal' in d) || ('renewal' in d && renewal(d.previousRenewal,uid,sid,id,d.acquiredMonth)));
+        && (!('previousRenewal' in d) || ('renewal' in d && renewal(d.previousRenewal,uid,sid,id,d.acquiredMonth)))
+        && (!('acquiredAttemptId' in d) || (!('renewal' in d) || !('attemptId' in d.renewal) || d.acquiredAttemptId != d.renewal.attemptId))
+        && (!('acquiredAttemptId' in d) || (!('previousRenewal' in d) || !('attemptId' in d.previousRenewal) || d.acquiredAttemptId != d.previousRenewal.attemptId))
+        && (!('renewal' in d) || !('previousRenewal' in d) || !('attemptId' in d.renewal) || !('attemptId' in d.previousRenewal) || d.renewal.attemptId != d.previousRenewal.attemptId);
     }
     function unlinked(uid,sid,qid,id) {
       let path = /databases/$(database)/documents/users/$(uid)/datasets/$(sid)/acquisitions/$(qid);
