@@ -20,3 +20,13 @@ export function makeBackup(records: Records, now = new Date()): Backup {
   validateRecords(records)
   return { format: 'qualification-records', version: 1, exportedAt: now.toISOString(), tags: TAGS.map(({ id, label }) => ({ id, label })), ...structuredClone(records) }
 }
+
+export function backupRecords(backup: Backup): Records {
+  // A Backup held in a Vue ref is a Proxy and cannot be passed to structuredClone directly.
+  const copy = JSON.parse(JSON.stringify(backup)) as Backup
+  return {
+    qualifications: copy.qualifications,
+    acquisitions: copy.acquisitions,
+    examAttempts: copy.examAttempts,
+  }
+}

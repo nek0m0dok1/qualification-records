@@ -30,7 +30,7 @@ async function restore() {
   if (!session.user || !session.loaded || !candidate.value || disabled.value || uncertain.value) return
   if (!await ask(`現在の全記録を、資格${candidate.value.qualifications.length}件・受験履歴${candidate.value.examAttempts.length}件のバックアップへ置き換えます。既存記録は削除されます。必要なら先にJSONを書き出してください。`)) return
   session.busy = true; session.error = ''; session.message = ''
-  try { await new Repository(session.user.uid).replace(plain(session.loaded.head), plain(candidate.value), text => { progress.value = text }); session.message = '復元の切り替えが完了しました。'; candidate.value = null }
+  try { await new Repository(session.user.uid).replaceBackup(plain(session.loaded.head), candidate.value, text => { progress.value = text }); session.message = '復元の切り替えが完了しました。'; candidate.value = null }
   catch (err) { session.error = errorMessage(err); if (session.error.includes('切り替え結果を確認できません')) uncertain.value = true }
   finally { session.busy = false; progress.value = '' }
   await refresh()

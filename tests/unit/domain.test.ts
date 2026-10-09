@@ -2,7 +2,8 @@ import { describe, expect, it } from 'vitest'
 import { emptyRecords, type Qualification } from '../../src/domain/model'
 import { cancelLatestRenewal, compareExamDates, deleteAttempt, editAttempt, register, ownedQualifications } from '../../src/domain/records'
 import { validDate } from '../../src/domain/validation'
-import { makeBackup, parseBackup } from '../../src/domain/backup'
+import { backupRecords, makeBackup, parseBackup } from '../../src/domain/backup'
+import { ref } from 'vue'
 
 const qualification = (id: string, name: string, tags: string[]): Qualification => ({ id, name, gradeOrCategory: '', fixedTagIds: tags, memo: '' })
 
@@ -71,5 +72,10 @@ describe('検索・絞り込みとJSONバックアップ', () => {
     expect(parseBackup(JSON.stringify(backup))).toEqual(backup)
     expect(() => parseBackup(JSON.stringify({ ...backup, unexpected: true }))).toThrow()
     expect(() => parseBackup(JSON.stringify({ ...backup, acquisitions: [{ ...backup.acquisitions[0], acquiredAttemptId: 'missing' }] }))).toThrow()
+  })
+
+  it('Vue ref内のリアクティブなバックアップをRecordsへ抽出できる', () => {
+    const candidate = ref(makeBackup(emptyRecords()))
+    expect(backupRecords(candidate.value)).toEqual(emptyRecords())
   })
 })
