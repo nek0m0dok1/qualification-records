@@ -3,10 +3,10 @@ import { onAuthStateChanged, signOut, reload, getIdToken, type User } from 'fire
 import { auth, eraseCache, storageGet, storageSet, storageRemove } from '../services/firebase'
 import { Repository, type Loaded } from '../services/repository'
 import { emptyRecords, type Records } from '../domain/model'
-export const session = reactive({ user: null as User | null, ready: false, records: emptyRecords(), loaded: null as Loaded | null, busy: false, fetching: false, writable: false, cacheOnly: false, message: '', error: '', lastFetched: '', cleanupWarning: '', initialized: false })
+export const session = reactive({ user: null as User | null, ready: false, cacheDeletionRequired: storageGet('qr:cleanup-required') === 'true', records: emptyRecords(), loaded: null as Loaded | null, busy: false, fetching: false, writable: false, cacheOnly: false, message: '', error: '', lastFetched: '', cleanupWarning: '', initialized: false })
 export const plain = <T>(value: T): T => JSON.parse(JSON.stringify(value))
 let epoch = 0
-let fetchPromise: Promise<void> | null = null
+const fetches = new Map<string, Promise<void>>()
 export function errorMessage(error: unknown): string {
   const code = (error as { code?: string })?.code
   if (code?.startsWith('auth/')) return ({ 'auth/invalid-credential': 'メールアドレスまたはパスワードを確認してください。', 'auth/email-already-in-use': 'このメールアドレスは登録済みです。', 'auth/weak-password': 'パスワードは6文字以上にしてください。', 'auth/too-many-requests': 'しばらく待ってお試しください。', 'auth/network-request-failed': '接続を確認してください。' } as Record<string, string>)[code] ?? '認証に失敗しました。入力内容と通信状態を確認してください。'
@@ -20,12 +20,13 @@ function resetView() {
   session.lastFetched = ''; session.message = ''; session.error = ''; session.cleanupWarning = ''; session.cacheOnly = false
 }
 export function refresh(): Promise<void> {
-  if (fetchPromise) return fetchPromise
   const user = session.user
   if (!user?.emailVerified || session.busy) return Promise.resolve()
-  const token = epoch, repo = new Repository(user.uid)
+  const token = epoch, key = `${epoch}:${user.uid}`, repo = new Repository(user.uid)
+  const pending = fetches.get(key)
+  if (pending) return pending
   session.fetching = true
-  fetchPromise = (async () => {
+  const current = (async () => {
     try {
       if (!navigator.onLine) throw new Error('offline')
       if (!session.initialized) { await repo.initialize(); if (token !== epoch) return; session.initialized = true }
@@ -48,8 +49,9 @@ export function refresh(): Promise<void> {
         session.error = session.loaded ? '通信できないため、表示中の記録の閲覧・検索のみ利用できます。' : `${errorMessage(cacheError)} 接続状態と端末保存の設定を確認してください。`
       }
     } finally { if (token === epoch) session.fetching = false }
-  })().finally(() => { fetchPromise = null })
-  return fetchPromise
+  })().finally(() => { fetches.delete(key) })
+  fetches.set(key, current)
+  return current
 }
 export async function changeRecords(transform: (records: Records) => Records): Promise<boolean> {
   if (!session.user || !session.loaded || !session.writable || !navigator.onLine || session.busy || session.fetching) { session.error = '今は変更できません。オンラインで更新してください。'; return false }
@@ -75,12 +77,13 @@ export async function logout(): Promise<void> {
     if (uid) storageRemove(`qr:fetched:${uid}`)
     storageRemove('qr:cleanup-required'); location.assign('/login')
   } catch (error) {
+    session.cacheDeletionRequired = true
     storageSet('qr:cleanup-required', 'true')
     session.error = `端末データの削除が未完了です。他のタブを閉じて削除を再試行してください。${errorMessage(error)}`; session.busy = false
   }
 }
 export async function retryCacheDeletion() {
-  try { await eraseCache(); storageRemove('qr:cleanup-required'); location.assign('/login') }
+  try { await eraseCache(); storageRemove('qr:cleanup-required'); session.cacheDeletionRequired = false; location.assign('/login') }
   catch { session.error = '他のタブを閉じてください。端末データの削除はまだ完了していません。' }
 }
 export async function checkVerification() {
@@ -94,7 +97,7 @@ export function startSession() {
   onAuthStateChanged(auth, async user => {
     if (user?.uid !== session.user?.uid) { epoch++; resetView() }
     session.user = user; session.ready = true
-    if (user?.emailVerified && storageGet('qr:cleanup-required') !== 'true') await refresh()
+    if (user?.emailVerified && !session.cacheDeletionRequired) await refresh()
   })
   window.addEventListener('offline', () => { session.writable = false; session.cacheOnly = true })
   window.addEventListener('online', () => void refresh())

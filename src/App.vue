@@ -2,13 +2,13 @@
 import { computed } from 'vue'
 import { useRegisterSW } from 'virtual:pwa-register/vue'
 import { session, refresh, logout, retryCacheDeletion } from './state/session'
-import { configured, storageGet, rememberDevice } from './services/firebase'
+import { configured, rememberDevice } from './services/firebase'
 import { ui, openWizard, closeDialog } from './state/ui'
 import Modal from './components/Modal.vue'
 import Wizard from './components/Wizard.vue'
 import AuthForm from './components/AuthForm.vue'
 const sw = useRegisterSW({ immediate: true })
-const blocked = computed(() => storageGet('qr:cleanup-required') === 'true')
+const blocked = computed(() => session.cacheDeletionRequired)
 const updating = computed(() => session.busy || session.fetching)
 </script>
 <template>
