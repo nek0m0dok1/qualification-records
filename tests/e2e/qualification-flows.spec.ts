@@ -31,7 +31,7 @@ async function addRenewalFromDetail(page: Page, month: string) {
   await page.getByRole('button', { name: '次へ' }).click()
   await page.getByRole('button', { name: '次へ' }).click()
   await page.getByLabel('保有資格のみ登録する').check()
-  await page.getByLabel('更新年月').fill(month)
+  await page.getByRole('textbox', { name: '更新年月', exact: true }).fill(month)
   await page.getByRole('button', { name: '次へ' }).click()
   await page.getByRole('button', { name: '記録を保存' }).click()
 }
@@ -67,7 +67,7 @@ test('主要フロー: 取り消し後の訂正年月と自己削除・別画面
   await page.getByRole('button', { name: '次へ' }).click()
   await page.getByRole('button', { name: '次へ' }).click()
   await page.getByLabel('保有資格のみ登録する').check()
-  await page.getByLabel('更新年月').fill('2024-01')
+  await page.getByRole('textbox', { name: '更新年月', exact: true }).fill('2024-01')
   await page.getByRole('button', { name: '次へ' }).click()
   await page.getByRole('button', { name: '記録を保存' }).click()
   await card.click()
