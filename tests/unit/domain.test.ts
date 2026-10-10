@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { emptyRecords, type Qualification } from '../../src/domain/model'
 import { cancelLatestRenewal, compareExamDates, deleteAttempt, editAttempt, register, ownedQualifications } from '../../src/domain/records'
-import { validDate } from '../../src/domain/validation'
+import { formatDate, validDate } from '../../src/domain/validation'
 import { backupRecords, makeBackup, parseBackup } from '../../src/domain/backup'
 import { ref } from 'vue'
 
@@ -10,10 +10,24 @@ const qualification = (id: string, name: string, tags: string[]): Qualification 
 describe('日付の検証と履歴の並び順', () => {
   it('実在する年月日を検証し、うるう年と日付なしを扱う', () => {
     expect(validDate('2024-02-29', true)).toBe(true)
+    expect(validDate('2000-02-29', true)).toBe(true)
+    expect(validDate('1900-02-29', true)).toBe(false)
     expect(validDate('2023-02-29', true)).toBe(false)
     expect(validDate('2024-04-31', true)).toBe(false)
     expect(validDate('2024-04', true)).toBe(true)
     expect(validDate('2024-4', true)).toBe(false)
+    expect(validDate('0001-01', true)).toBe(true)
+    expect(validDate('9999-12', true)).toBe(true)
+    expect(validDate('0000-01', true)).toBe(false)
+    expect(validDate('10000-01', true)).toBe(false)
+    expect(validDate('100000-01', true)).toBe(false)
+  })
+
+  it('年月のみと日付ありを日本語表示にする', () => {
+    expect(formatDate('2024-01')).toBe('2024年1月')
+    expect(formatDate('2024-02-09')).toBe('2024年2月9日')
+    expect(formatDate('0001-01')).toBe('1年1月')
+    expect(formatDate('9999-12')).toBe('9999年12月')
   })
 
   it('日が不明な履歴は同月の末尾に置き、IDで順序を安定させる', () => {
