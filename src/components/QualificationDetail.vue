@@ -22,7 +22,7 @@ function beginEditing() {
 async function save() { if (await changeRecords(records => editQualification(records, { id: props.id, name: draft.name.trim(), gradeOrCategory: draft.gradeOrCategory, fixedTagIds: [...draft.fixedTagIds], memo: draft.memo }, a.value ? draft.acquiredMonth : undefined, a.value?.renewal ? draft.renewedMonth : undefined))) editing.value = false }
 async function remove() { if (!q.value) { emit('close'); return }; if (await ask(`「${q.value.name}」と、取得・更新情報、受験履歴${attempts.value.length}件をすべて削除します。よろしいですか？`)) if (await changeRecords(records => deleteQualification(records, props.id, true))) emit('close') }
 async function undo() { if (!a.value?.renewal) return; if (await ask(a.value.previousRenewal ? `最新更新を取り消し、${a.value.previousRenewal.month}の情報へ戻します。合格履歴は残します。` : '最新更新情報を削除します。取得年月と合格履歴は残します。')) await changeRecords(records => cancelLatestRenewal(records, props.id, true)) }
-async function close() { if (editing.value) await ask('編集中の変更を破棄します。このダイアログを閉じると詳細画面を終了します。', false); emit('close') }
+async function close() { if (editing.value && !await ask('編集中の変更を破棄します。このダイアログを閉じると詳細画面を終了します。', false)) return; emit('close') }
 </script>
 <template>
   <Modal v-if="q" :title="editing ? '資格情報の訂正' : q.name" :busy="session.busy" @close="close">
