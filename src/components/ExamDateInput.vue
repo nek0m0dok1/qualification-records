@@ -33,7 +33,7 @@ function openCalendar() {
     </div>
     <div v-if="open" :id="`${id}-calendar`" class="date-picker-popover" role="group" :aria-label="`${label}カレンダー`">
       <div class="date-picker-controls"><label>年<select v-model.number="year" aria-label="年"><option v-for="y in yearOptions" :key="y" :value="y">{{ String(y).padStart(4, '0') }}</option></select></label><label>月<select v-model.number="month" aria-label="月"><option v-for="m in monthOptions" :key="m" :value="m">{{ m }}月</option></select></label></div>
-      <template v-if="allowDay"><div class="calendar-weekdays" aria-hidden="true"><span v-for="d in ['日','月','火','水','木','金','土']" :key="d">{{ d }}</span></div><div class="calendar-days"><span v-for="n in offset" :key="`empty-${n}`" class="calendar-day-empty"></span><button v-for="day in days" :key="day" type="button" class="secondary calendar-day" :aria-label="`${year}年${month}月${day}日`" @click="chooseDay(day)">{{ day }}</button></div><button type="button" class="text-button date-month-only" @click="clearDay">日付なし（年月のみ）</button></template>
+      <template v-if="allowDay"><div class="calendar-weekdays" aria-hidden="true"><span v-for="d in ['日','月','火','水','木','金','土']" :key="d">{{ d }}</span></div><div class="calendar-days"><span v-for="n in offset" :key="`empty-${n}`" class="calendar-day-empty"></span><button v-for="day in days" :key="day" type="button" class="secondary calendar-day" :aria-label="`${year}年${month}月${day}日`" @click="chooseDay(day)">{{ day }}</button></div><button type="button" class="text-button date-month-only" @click="clearDay">年月のみで登録</button></template>
       <button v-else type="button" class="secondary date-month-submit" @click="chooseMonth">この年月を選択</button>
     </div>
   </div>

@@ -9,11 +9,12 @@ export function ask(message: string, confirm = true): Promise<boolean> {
   return new Promise(resolve => { finish = resolve })
 }
 export function closeDialog(accepted = false) {
-  const result = accepted || ui.dialog?.confirm === false
+  const result = accepted
   ui.dialog = null; finish?.(result); finish = undefined
 }
 export function openWizard(id = '') { ui.wizardQualificationId = id; ui.wizardDirty = false; ui.wizardOpen = true }
-export async function discardWizard() {
-  if (ui.wizardDirty) await ask('入力途中の内容と進捗を破棄します。このダイアログを閉じると入力画面を終了します。', false)
+export async function discardWizard(): Promise<boolean> {
+  if (ui.wizardDirty && !await ask('入力途中の内容と進捗を破棄します。破棄する場合は「閉じて破棄する」を選択してください。', false)) return false
   ui.wizardOpen = false; ui.wizardDirty = false; ui.wizardQualificationId = ''
+  return true
 }
