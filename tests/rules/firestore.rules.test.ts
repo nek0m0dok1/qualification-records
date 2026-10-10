@@ -32,4 +32,10 @@ describe('Firestore Security Rules', () => {
     const unverified = env.authenticatedContext('owner', { email_verified: false }).firestore()
     await assertFails(unverified.doc('users/owner').get())
   })
+
+  it('denies unauthenticated reads and writes', async () => {
+    const guest = env.unauthenticatedContext().firestore()
+    await assertFails(guest.doc('users/owner').get())
+    await assertFails(guest.doc('users/owner').update({ revision: 2 }))
+  })
 })
