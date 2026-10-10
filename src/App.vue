@@ -38,6 +38,6 @@ function accountLogout() {
       <p class="help">ログアウトすると、この端末に保存した記録を削除します。サーバーの記録は残ります。</p>
       <div class="actions"><button type="button" class="secondary" :disabled="updating || ui.wizardOpen" @click="accountLogout">ログアウト</button></div>
     </Modal>
-    <Modal v-if="ui.dialog" :title="ui.dialog.confirm ? '変更内容の確認' : '入力内容を破棄します'" @close="closeDialog(false)"><p class="dialog-message">{{ ui.dialog.message }}</p><div class="actions"><button v-if="ui.dialog.confirm" class="secondary" @click="closeDialog(false)">キャンセル</button><button @click="closeDialog(true)">{{ ui.dialog.confirm ? '同意して続ける' : '閉じて破棄する' }}</button></div></Modal>
+    <Modal v-if="ui.dialog" :title="ui.dialog.confirm ? '変更内容の確認' : '入力内容を破棄します'" @close="closeDialog(false)"><p class="dialog-message">{{ ui.dialog.message }}</p><div class="actions"><button v-if="ui.dialog.confirm" class="secondary" @click="closeDialog(false)">キャンセル</button><button :class="{ 'danger-button': !ui.dialog.confirm }" @click="closeDialog(true)">{{ ui.dialog.confirm ? '同意して続ける' : '閉じて破棄する' }}</button></div></Modal>
   </div>
 </template>

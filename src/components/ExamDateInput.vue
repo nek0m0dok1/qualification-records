@@ -26,9 +26,9 @@ function openCalendar() {
 </script>
 <template>
   <div class="date-picker-control">
-    <label :for="id">{{ label }}</label>
+    <label :for="id">{{ label }}<span class="required-marker" aria-hidden="true"></span></label>
     <div class="date-input-row">
-      <input :id="id" :value="modelValue" :required="!allowDay" :maxlength="allowDay ? 10 : 7" :pattern="valuePattern" :aria-label="label" :placeholder="allowDay ? 'YYYY-MM または YYYY-MM-DD' : 'YYYY-MM'" inputmode="numeric" @input="emit('update:modelValue', ($event.target as HTMLInputElement).value)">
+      <input :id="id" :value="modelValue" required :maxlength="allowDay ? 10 : 7" :pattern="valuePattern" :aria-label="label" :placeholder="allowDay ? 'YYYY-MM または YYYY-MM-DD' : 'YYYY-MM'" inputmode="numeric" @input="emit('update:modelValue', ($event.target as HTMLInputElement).value)">
       <button type="button" class="secondary calendar-trigger" :aria-expanded="open" :aria-controls="`${id}-calendar`" :aria-label="`${label}カレンダーを開く`" @click="openCalendar">▦</button>
     </div>
     <div v-if="open" :id="`${id}-calendar`" class="date-picker-popover" role="group" :aria-label="`${label}カレンダー`">
