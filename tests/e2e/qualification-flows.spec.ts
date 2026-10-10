@@ -83,10 +83,10 @@ test('主要フロー: 取り消し後の訂正年月と自己削除・別画面
   await addRenewalFromDetail(page, '2026-01')
   await page.getByRole('button', { name: /E2E訂正資格/ }).click()
   await page.getByRole('button', { name: '情報を訂正' }).click()
-  await page.getByLabel('最新の更新年月').fill('2027-01')
+  await page.getByRole('textbox', { name: '最新の更新年月', exact: true }).fill('2027-01')
   await page.getByRole('button', { name: '訂正を取り消す' }).click()
   await page.getByRole('button', { name: '情報を訂正' }).click()
-  await expect(page.getByLabel('最新の更新年月')).toHaveValue('2026-01')
+  await expect(page.getByRole('textbox', { name: '最新の更新年月', exact: true })).toHaveValue('2026-01')
   await page.getByRole('button', { name: '訂正を取り消す' }).click()
   await page.getByRole('button', { name: '閉じる' }).click()
 
