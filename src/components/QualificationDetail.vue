@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, reactive, ref, watch } from 'vue'
 import Modal from './Modal.vue'
-import { session, changeRecords, plain } from '../state/session'
+import { session, changeRecords } from '../state/session'
 import { ask, openWizard } from '../state/ui'
 import { TAGS, resultLabel } from '../domain/model'
 import { formatDate } from '../domain/validation'
