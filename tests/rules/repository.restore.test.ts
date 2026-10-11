@@ -20,7 +20,12 @@ afterAll(async () => env.cleanup())
 
 describe('JSONバックアップの復元', () => {
   it('正常な空バックアップをデータセット切り替えまで実行できる', async () => {
-    const repo = new Repository('restore-user', env.authenticatedContext('restore-user', { email_verified: true }).firestore() as unknown as Firestore)
+    const repo = new Repository(
+      'restore-user',
+      env
+        .authenticatedContext('restore-user', { email_verified: true })
+        .firestore() as unknown as Firestore,
+    )
     await repo.initialize()
     const before = await repo.load()
     const candidate = ref(makeBackup(emptyRecords(), new Date('2026-10-10T00:00:00.000Z')))

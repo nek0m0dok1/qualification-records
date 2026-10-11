@@ -7,7 +7,7 @@ async function waitForAuthEmulator(request: APIRequestContext) {
       await request.get('http://127.0.0.1:9099/')
       return
     } catch {
-      await new Promise(resolve => setTimeout(resolve, 250))
+      await new Promise((resolve) => setTimeout(resolve, 250))
     }
   }
   throw new Error('Firebase Auth Emulator did not become available')
@@ -36,20 +36,39 @@ async function addRenewalFromDetail(page: Page, month: string) {
   await page.getByRole('button', { name: '記録を保存' }).click()
 }
 
-test('主要フロー: 取り消し後の訂正年月と自己削除・別画面からの削除', async ({ page, request, browser }) => {
+test('主要フロー: 取り消し後の訂正年月と自己削除・別画面からの削除', async ({
+  page,
+  request,
+  browser,
+}) => {
   await waitForAuthEmulator(request)
   const email = `e2e-${Date.now()}@example.test`
   const password = 'e2e-password-123'
-  const signup = await request.post('http://127.0.0.1:9099/identitytoolkit.googleapis.com/v1/accounts:signUp?key=demo-api-key', { data: { email, password, returnSecureToken: true } })
+  const signup = await request.post(
+    'http://127.0.0.1:9099/identitytoolkit.googleapis.com/v1/accounts:signUp?key=demo-api-key',
+    { data: { email, password, returnSecureToken: true } },
+  )
   expect(signup.ok()).toBeTruthy()
   const { idToken } = await signup.json()
-  const verification = await request.post('http://127.0.0.1:9099/identitytoolkit.googleapis.com/v1/accounts:sendOobCode?key=demo-api-key', { data: { requestType: 'VERIFY_EMAIL', idToken } })
+  const verification = await request.post(
+    'http://127.0.0.1:9099/identitytoolkit.googleapis.com/v1/accounts:sendOobCode?key=demo-api-key',
+    { data: { requestType: 'VERIFY_EMAIL', idToken } },
+  )
   expect(verification.ok()).toBeTruthy()
-  const pendingCodes = await request.get('http://127.0.0.1:9099/emulator/v1/projects/demo-qualification-records/oobCodes')
+  const pendingCodes = await request.get(
+    'http://127.0.0.1:9099/emulator/v1/projects/demo-qualification-records/oobCodes',
+  )
   expect(pendingCodes.ok()).toBeTruthy()
   const { oobCodes } = await pendingCodes.json()
-  const { oobCode } = oobCodes.find((code: { email: string; requestType: string }) => code.email === email && code.requestType === 'VERIFY_EMAIL') ?? {}
-  const verified = await request.post('http://127.0.0.1:9099/identitytoolkit.googleapis.com/v1/accounts:update?key=demo-api-key', { data: { oobCode } })
+  const { oobCode } =
+    oobCodes.find(
+      (code: { email: string; requestType: string }) =>
+        code.email === email && code.requestType === 'VERIFY_EMAIL',
+    ) ?? {}
+  const verified = await request.post(
+    'http://127.0.0.1:9099/identitytoolkit.googleapis.com/v1/accounts:update?key=demo-api-key',
+    { data: { oobCode } },
+  )
   expect(verified.ok(), await verified.text()).toBeTruthy()
 
   await page.goto('/login')
@@ -116,7 +135,9 @@ test('主要フロー: 取り消し後の訂正年月と自己削除・別画面
   await page.getByRole('textbox', { name: '最新の更新年月', exact: true }).fill('2027-01')
   await page.getByRole('button', { name: '訂正を取り消す' }).click()
   await page.getByRole('button', { name: '情報を訂正' }).click()
-  await expect(page.getByRole('textbox', { name: '最新の更新年月', exact: true })).toHaveValue('2026-01')
+  await expect(page.getByRole('textbox', { name: '最新の更新年月', exact: true })).toHaveValue(
+    '2026-01',
+  )
   await page.getByRole('button', { name: '訂正を取り消す' }).click()
   await page.getByRole('button', { name: '閉じる' }).click()
 

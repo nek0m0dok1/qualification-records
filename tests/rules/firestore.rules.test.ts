@@ -1,15 +1,27 @@
 import { readFile } from 'node:fs/promises'
 import { afterAll, beforeAll, describe, it } from 'vitest'
-import { assertFails, assertSucceeds, initializeTestEnvironment, type RulesTestEnvironment } from '@firebase/rules-unit-testing'
+import {
+  assertFails,
+  assertSucceeds,
+  initializeTestEnvironment,
+  type RulesTestEnvironment,
+} from '@firebase/rules-unit-testing'
 
 let env: RulesTestEnvironment
 beforeAll(async () => {
-  env = await initializeTestEnvironment({ projectId: 'demo-qualification-records', firestore: { host: '127.0.0.1', port: 8080, rules: await readFile('firestore.rules', 'utf8') } })
+  env = await initializeTestEnvironment({
+    projectId: 'demo-qualification-records',
+    firestore: { host: '127.0.0.1', port: 8080, rules: await readFile('firestore.rules', 'utf8') },
+  })
   await env.clearFirestore()
-  await env.withSecurityRulesDisabled(async context => {
+  await env.withSecurityRulesDisabled(async (context) => {
     const db = context.firestore()
     await db.doc('users/owner').set({ activeDatasetId: 'active', revision: 0 })
-    await db.doc('users/owner/datasets/active').set({ status: 'ready', createdAt: '2026-01-01T00:00:00.000Z', counts: { qualifications: 0, acquisitions: 0, examAttempts: 0 } })
+    await db.doc('users/owner/datasets/active').set({
+      status: 'ready',
+      createdAt: '2026-01-01T00:00:00.000Z',
+      counts: { qualifications: 0, acquisitions: 0, examAttempts: 0 },
+    })
   })
 })
 afterAll(async () => env.cleanup())
@@ -19,7 +31,12 @@ describe('Firestore Security Rules', () => {
     const owner = env.authenticatedContext('owner', { email_verified: true }).firestore()
     const batch = owner.batch()
     batch.update(owner.doc('users/owner'), { revision: 1 })
-    batch.set(owner.doc('users/owner/datasets/active/qualifications/q1'), { name: '資格A', gradeOrCategory: '', fixedTagIds: [], memo: '' })
+    batch.set(owner.doc('users/owner/datasets/active/qualifications/q1'), {
+      name: '資格A',
+      gradeOrCategory: '',
+      fixedTagIds: [],
+      memo: '',
+    })
     await assertSucceeds(batch.commit())
     await assertSucceeds(owner.doc('users/owner/datasets/active/qualifications/q1').get())
 
