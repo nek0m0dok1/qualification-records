@@ -48,6 +48,10 @@ function resetTarget() {
   error.value = ''
   ui.wizardDirty = true
 }
+function goBack() {
+  step.value--
+  error.value = ''
+}
 function validateStep() {
   if (step.value === 0 && (!method.value || (method.value === 'existing' && !existing.value)))
     throw new Error('新資格または対象の既存資格を選択してください。')
@@ -221,10 +225,7 @@ async function save() {
           type="button"
           class="secondary"
           :disabled="session.busy"
-          @click="
-            step--
-            error = ''
-          "
+          @click="goBack"
         >
           戻る</button
         ><button type="button" class="text-button" :disabled="session.busy" @click="discardWizard">

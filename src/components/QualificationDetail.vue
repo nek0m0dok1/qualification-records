@@ -42,6 +42,10 @@ function beginEditing() {
   })
   editing.value = true
 }
+function addAttempt() {
+  emit('close')
+  openWizard(props.id)
+}
 async function save() {
   if (
     await changeRecords((records) =>
@@ -145,13 +149,7 @@ async function close() {
         </li>
       </ul>
       <div class="actions wrap">
-        <button
-          :disabled="!session.writable || session.busy"
-          @click="
-            emit('close')
-            openWizard(id)
-          "
-        >
+        <button :disabled="!session.writable || session.busy" @click="addAttempt">
           受験・更新を追加</button
         ><button
           class="secondary"
