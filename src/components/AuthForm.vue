@@ -1,13 +1,16 @@
 <script setup lang="ts">
-import { ref, computed } from 'vue'
+import { ref, computed, useId, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import {
   createUserWithEmailAndPassword,
   signInWithEmailAndPassword,
   sendEmailVerification,
   sendPasswordResetEmail,
+  setPersistence,
+  indexedDBLocalPersistence,
+  browserSessionPersistence,
 } from 'firebase/auth'
-import { auth, storageSet, rememberDevice } from '../services/firebase'
+import { auth, storageSet, storageGet } from '../services/firebase'
 import { session, checkVerification, errorMessage, logout } from '../state/session'
 const route = useRoute(),
   router = useRouter()
@@ -16,17 +19,29 @@ const mode = computed(() =>
 )
 const email = ref(''),
   password = ref(''),
-  remember = ref(rememberDevice),
+  remember = ref(storageGet('qr:remember-login') === 'true'),
   busy = ref(false),
   message = ref(''),
   error = ref('')
+const passwordId = useId(),
+  showPassword = ref(false)
+watch(mode, () => {
+  showPassword.value = false
+})
 async function submit() {
   if (!auth) return
   busy.value = true
   error.value = ''
   message.value = ''
-  storageSet('qr:remember', String(remember.value))
+
   try {
+    if (mode.value !== 'reset') {
+      await setPersistence(
+        auth,
+        remember.value ? indexedDBLocalPersistence : browserSessionPersistence,
+      )
+      storageSet('qr:remember-login', String(remember.value))
+    }
     if (mode.value === 'reset') {
       await sendPasswordResetEmail(auth, email.value)
       message.value = '登録されている場合、再設定メールが届きます。受信メールをご確認ください。'
@@ -96,21 +111,42 @@ async function resend() {
         }}
       </h2>
       <label
-        >メールアドレス<span class="required-marker" aria-hidden="true">*</span
-        ><input v-model="email" type="email" autocomplete="email" required maxlength="254" /></label
-      ><label v-if="mode !== 'reset'"
-        >パスワード<span class="required-marker" aria-hidden="true">*</span
-        ><input
-          v-model="password"
-          type="password"
-          :autocomplete="mode === 'register' ? 'new-password' : 'current-password'"
-          required
-          minlength="6" /></label
-      ><label v-if="mode !== 'reset'" class="check"
-        ><input v-model="remember" type="checkbox" />この端末に記録を保存する</label
+        >メールアドレス<span class="required-marker" aria-hidden="true"></span
+        ><input v-model="email" type="email" autocomplete="email" required maxlength="254"
+      /></label>
+      <div v-if="mode !== 'reset'" class="password-field">
+        <label :for="passwordId"
+          >パスワード<span class="required-marker" aria-hidden="true"></span
+        ></label>
+        <div class="password-input">
+          <button
+            type="button"
+            class="password-toggle"
+            :aria-label="showPassword ? 'パスワードを非表示' : 'パスワードを表示'"
+            :aria-pressed="showPassword"
+            :aria-controls="passwordId"
+            @click="showPassword = !showPassword"
+          >
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12Z" />
+              <circle cx="12" cy="12" r="3" />
+              <path v-if="showPassword" d="m3 3 18 18" />
+            </svg></button
+          ><input
+            :id="passwordId"
+            v-model="password"
+            :type="showPassword ? 'text' : 'password'"
+            :autocomplete="mode === 'register' ? 'new-password' : 'current-password'"
+            required
+            minlength="6"
+          />
+        </div>
+      </div>
+      <label v-if="mode !== 'reset'" class="check"
+        ><input v-model="remember" type="checkbox" />ログイン状態を記憶する</label
       >
       <p v-if="mode !== 'reset'" class="help">
-        共用端末では選択しないでください。保存済みの記録は通信できない場所でも閲覧できます。
+        選択すると次回もログイン状態を保持します。共用端末では選択しないでください。パスワードの保存はブラウザで設定できます。
       </p>
       <button class="wide" :disabled="busy">
         {{

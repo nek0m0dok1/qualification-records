@@ -48,10 +48,6 @@ function resetTarget() {
   error.value = ''
   ui.wizardDirty = true
 }
-function goBack() {
-  step.value--
-  error.value = ''
-}
 function validateStep() {
   if (step.value === 0 && (!method.value || (method.value === 'existing' && !existing.value)))
     throw new Error('新資格または対象の既存資格を選択してください。')
@@ -69,6 +65,10 @@ function validateStep() {
     if ((draft.result !== 'passed' || draft.history === 'yes') && !validDate(draft.examDate, true))
       throw new Error('受験年月を入力してください。日付はYYYY-MMまたはYYYY-MM-DDです。')
   }
+}
+function goBack() {
+  step.value--
+  error.value = ''
 }
 function next() {
   try {
@@ -113,7 +113,7 @@ async function save() {
         <li :class="{ current: step === 3 }">確認</li>
       </ol>
       <fieldset v-if="step === 0">
-        <legend>記録する資格を選ぶ<span class="required-marker" aria-hidden="true">*</span></legend>
+        <legend>記録する資格を選ぶ<span class="required-marker" aria-hidden="true"></span></legend>
         <label class="check"
           ><input
             v-model="method"
@@ -129,7 +129,7 @@ async function save() {
             @change="resetTarget"
           />既存資格の更新・受験履歴の追加</label
         ><label v-if="method === 'existing'"
-          >対象資格<span class="required-marker" aria-hidden="true">*</span
+          >対象資格<span class="required-marker" aria-hidden="true"></span
           ><select v-model="existingId" @change="resetTarget">
             <option value="">選択してください</option>
             <option v-for="q in session.records.qualifications" :key="q.id" :value="q.id">
@@ -141,7 +141,7 @@ async function save() {
       <div v-if="step === 1">
         <template v-if="method === 'new'"
           ><label
-            >資格名<span class="required-marker" aria-hidden="true">*</span
+            >資格名<span class="required-marker" aria-hidden="true"></span
             ><input v-model="draft.name" maxlength="200" required /></label
           ><label>級・区分（任意）<input v-model="draft.gradeOrCategory" maxlength="100" /></label>
           <fieldset>
@@ -158,7 +158,7 @@ async function save() {
         ></template>
         <p v-else class="target-summary">{{ existing?.name }} {{ existing?.gradeOrCategory }}</p>
         <label
-          >受験結果<span class="required-marker" aria-hidden="true">*</span
+          >受験結果<span class="required-marker" aria-hidden="true"></span
           ><select v-model="draft.result">
             <option v-for="(label, value) in resultLabel" :key="value" :value="value">
               {{ label }}
@@ -174,12 +174,16 @@ async function save() {
         <template v-if="draft.result === 'passed'"
           ><fieldset>
             <legend>
-              受験履歴も登録しますか？<span class="required-marker" aria-hidden="true">*</span>
+              受験履歴も登録しますか？<span class="required-marker" aria-hidden="true"></span>
             </legend>
             <label class="check"
               ><input v-model="draft.history" type="radio" value="yes" />履歴も登録する</label
             ><label class="check"
-              ><input v-model="draft.history" type="radio" value="no" />保有資格のみ登録する</label
+              ><input
+                v-model="draft.history"
+                type="radio"
+                value="no"
+              />あなたの資格のみ登録する</label
             >
           </fieldset>
           <p v-if="acquisition" class="help">
@@ -228,8 +232,6 @@ async function save() {
           @click="goBack"
         >
           戻る</button
-        ><button type="button" class="text-button" :disabled="session.busy" @click="discardWizard">
-          閉じる</button
         ><button :disabled="session.busy || !session.writable || session.fetching">
           {{ session.busy ? '保存中…' : step === 3 ? '記録を保存' : '次へ' }}
         </button>

@@ -101,25 +101,23 @@ async function toggleDevice() {
     </div>
     <div class="settings-grid">
       <section class="settings-card">
-        <h2>端末への保存</h2>
+        <h2>ネットなしで見る</h2>
         <p>
           {{
             rememberDevice
-              ? '有効です。取得済みの記録をオフラインでも確認できます。'
-              : '無効です。再起動後のオフライン閲覧は保証されません。'
+              ? '保存した記録をネットなしで見られます。'
+              : 'ネットなしで見るには、端末保存を有効にします。'
           }}
         </p>
-        <p class="help">キャッシュはバックアップではありません。ログアウト時に削除します。</p>
+        <p class="help">ログアウトすると端末の記録は消えます。</p>
         <button class="secondary" :disabled="session.busy" @click="toggleDevice">
           {{ rememberDevice ? '端末保存を無効にする' : 'この端末に記録を保存する' }}
         </button>
       </section>
       <section class="settings-card">
-        <h2>JSONを書き出す</h2>
-        <p>全記録と関連付けを、ひとつのファイルに保存します。</p>
-        <p class="help">
-          オンラインで全記録を取得できた場合のみ書き出します。ファイルは暗号化されません。
-        </p>
+        <h2>バックアップを保存</h2>
+        <p>全記録をファイルに保存します。</p>
+        <p class="help">ネット接続が必要です。保存したファイルは大切に保管してください。</p>
         <button :disabled="disabled" @click="exportJson">バックアップを書き出す</button>
       </section>
       <section class="settings-card restore-card">

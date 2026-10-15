@@ -3,7 +3,7 @@ import { computed, ref } from 'vue'
 import { session } from '../state/session'
 import { filters, openWizard } from '../state/ui'
 import { ownedQualifications } from '../domain/records'
-import { formatDate } from '../domain/validation'
+
 import { TAGS } from '../domain/model'
 import QualificationDetail from '../components/QualificationDetail.vue'
 const filter = filters.owned
@@ -17,7 +17,7 @@ const selected = ref('')
     <div class="page-heading">
       <div>
         <p class="eyebrow">MY QUALIFICATIONS</p>
-        <h1>保有資格</h1>
+        <h1>あなたの資格</h1>
         <p>取得の記録を、ひと目で。</p>
       </div>
       <span class="count">{{ session.records.acquisitions.length }}<small>件の資格</small></span>
@@ -34,14 +34,29 @@ const selected = ref('')
           <option value="asc">取得年月：古い順</option>
         </select></label
       >
-      <fieldset>
-        <legend>ジャンルで絞り込み <span class="help">選択したすべてのタグに一致</span></legend>
+      <details class="filter-accordion">
+        <summary>
+          ジャンルで絞り込み
+          <span v-if="filter.tags.length" class="filter-count">{{ filter.tags.length }}件選択</span>
+        </summary>
+        <p class="help">選択したすべてのタグに一致</p>
         <div class="tag-options">
-          <label v-for="tag in TAGS" :key="tag.id" class="check"
-            ><input v-model="filter.tags" type="checkbox" :value="tag.id" />{{ tag.label }}</label
+          <button
+            v-for="tag in TAGS"
+            :key="tag.id"
+            type="button"
+            class="filter-chip"
+            :aria-pressed="filter.tags.includes(tag.id)"
+            @click="
+              filter.tags = filter.tags.includes(tag.id)
+                ? filter.tags.filter((id) => id !== tag.id)
+                : [...filter.tags, tag.id]
+            "
           >
+            {{ tag.label }}
+          </button>
         </div>
-      </fieldset>
+      </details>
     </div>
     <p class="result-count">{{ rows.length }}件を表示</p>
     <div class="card-grid">
@@ -63,15 +78,12 @@ const selected = ref('')
             >{{ tag.label }}</span
           >
         </div>
-        <div class="card-date">
-          <span>取得年月</span><strong>{{ formatDate(row.acquisition.acquiredMonth) }}</strong
-          ><span class="arrow" aria-hidden="true">↗</span>
-        </div>
+        <span class="card-open" aria-hidden="true">詳細を見る ↗</span>
       </button>
     </div>
     <div v-if="!rows.length" class="empty">
       <h2>
-        {{ session.loaded ? '該当する保有資格はありません' : '記録をまだ取得できていません' }}
+        {{ session.loaded ? '該当するあなたの資格はありません' : '記録をまだ取得できていません' }}
       </h2>
       <p>
         {{

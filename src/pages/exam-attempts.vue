@@ -30,11 +30,15 @@ function edit(id: string) {
   date.value = editing.value!.examDate
   month.value = ''
 }
+function editFromDetail(id: string) {
+  selected.value = ''
+  edit(id)
+}
 async function save() {
   if (!editing.value) return
   if (result.value !== editing.value.result) {
     const impact = becomingPassed.value
-      ? `合格への訂正に合わせて、保有情報の${owned.value ? '更新年月' : '取得年月'}も登録します。変更しない場合は結果の訂正も取り消します。`
+      ? `「合格」に変更し、${owned.value ? '更新年月' : '取得年月'}を登録します。`
       : linkedImpact(session.records, editingId.value)
     if (!(await ask(impact))) {
       editingId.value = ''
@@ -49,7 +53,7 @@ async function save() {
     editingId.value = ''
 }
 async function remove(id: string) {
-  if (await ask(`この受験履歴を削除します。${linkedImpact(session.records, id)}`))
+  if (await ask(`受験履歴を削除します。\n${linkedImpact(session.records, id)}`))
     await changeRecords((records) => deleteAttempt(records, id, true))
 }
 </script>
@@ -75,41 +79,45 @@ async function remove(id: string) {
           <option value="asc">受験年月：古い順</option>
         </select></label
       >
-      <fieldset>
-        <legend>受験結果</legend>
-        <div class="tag-options">
-          <label v-for="(label, value) in resultLabel" :key="value" class="check"
-            ><input v-model="filter.results" type="checkbox" :value="value" />{{ label }}</label
+      <details class="filter-accordion">
+        <summary>
+          受験結果で絞り込み
+          <span v-if="filter.results.length" class="filter-count"
+            >{{ filter.results.length }}件選択</span
           >
+        </summary>
+        <div class="tag-options">
+          <button
+            v-for="(label, value) in resultLabel"
+            :key="value"
+            type="button"
+            class="filter-chip"
+            :aria-pressed="filter.results.includes(value)"
+            @click="
+              filter.results = filter.results.includes(value)
+                ? filter.results.filter((result) => result !== value)
+                : [...filter.results, value]
+            "
+          >
+            {{ label }}
+          </button>
         </div>
-      </fieldset>
+      </details>
     </div>
     <p class="result-count">{{ rows.length }}件を表示</p>
     <div class="attempt-list">
       <article v-for="exam in rows" :key="exam.id" class="attempt-row">
-        <time>{{ formatDate(exam.examDate) }}</time
-        ><button class="text-button attempt-name" @click="selected = exam.qualificationId">
-          {{ session.records.qualifications.find((q) => q.id === exam.qualificationId)?.name
-          }}<small>{{
-            session.records.qualifications.find((q) => q.id === exam.qualificationId)
-              ?.gradeOrCategory
-          }}</small></button
-        ><span class="result-badge" :class="exam.result">{{ resultLabel[exam.result] }}</span>
-        <div class="row-actions">
-          <button
-            class="secondary compact"
-            :disabled="session.busy || !session.writable"
-            @click="edit(exam.id)"
-          >
-            訂正</button
-          ><button
-            class="text-button danger compact"
-            :disabled="session.busy || !session.writable"
-            @click="remove(exam.id)"
-          >
-            削除
-          </button>
-        </div>
+        <button type="button" class="attempt-card-open" @click="selected = exam.qualificationId">
+          <time>{{ formatDate(exam.examDate) }}</time
+          ><span class="attempt-name"
+            >{{ session.records.qualifications.find((q) => q.id === exam.qualificationId)?.name
+            }}<small>{{
+              session.records.qualifications.find((q) => q.id === exam.qualificationId)
+                ?.gradeOrCategory
+            }}</small></span
+          ><span class="result-badge" :class="exam.result">{{ resultLabel[exam.result] }}</span
+          ><span class="card-open" aria-hidden="true">詳細を見る ↗</span>
+        </button>
       </article>
     </div>
     <div v-if="!rows.length" class="empty">
@@ -118,14 +126,17 @@ async function remove(id: string) {
       </h2>
       <p>資格・受験の記録を追加するか、検索条件を変更してください。</p>
     </div>
-    <QualificationDetail v-if="selected" :id="selected" @close="selected = ''" /><Modal
-      v-if="editingId"
-      title="受験履歴の訂正"
-      :busy="session.busy"
-      @close="editingId = ''"
+    <QualificationDetail
+      v-if="selected"
+      :id="selected"
+      attempt-actions
+      @close="selected = ''"
+      @edit-attempt="editFromDetail"
+      @delete-attempt="remove"
+    /><Modal v-if="editingId" title="受験履歴の訂正" :busy="session.busy" @close="editingId = ''"
       ><form @submit.prevent="save">
         <ExamDateInput v-model="date" label="受験年月（日は任意）" allow-day /><label
-          >受験結果<span class="required-marker" aria-hidden="true">*</span
+          >受験結果<span class="required-marker" aria-hidden="true"></span
           ><select v-model="result">
             <option v-for="(label, value) in resultLabel" :key="value" :value="value">
               {{ label }}

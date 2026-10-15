@@ -7,8 +7,8 @@ import { TAGS, resultLabel } from '../domain/model'
 import { formatDate } from '../domain/validation'
 import { deleteQualification, editQualification, cancelLatestRenewal } from '../domain/records'
 import ExamDateInput from './ExamDateInput.vue'
-const props = defineProps<{ id: string }>(),
-  emit = defineEmits<{ close: [] }>()
+const props = defineProps<{ id: string; attemptActions?: boolean }>(),
+  emit = defineEmits<{ close: []; editAttempt: [id: string]; deleteAttempt: [id: string] }>()
 const q = computed(() => session.records.qualifications.find((x) => x.id === props.id))
 watch(
   q,
@@ -99,10 +99,16 @@ async function close() {
 }
 </script>
 <template>
-  <Modal v-if="q" :title="editing ? '資格情報の訂正' : q.name" :busy="session.busy" @close="close">
+  <Modal
+    v-if="q"
+    :class="{ 'qualification-detail': !editing }"
+    :title="editing ? '資格情報の訂正' : q.name"
+    :busy="session.busy"
+    @close="close"
+  >
     <form v-if="editing" @submit.prevent="save">
       <label
-        >資格名<span class="required-marker" aria-hidden="true">*</span
+        >資格名<span class="required-marker" aria-hidden="true"></span
         ><input v-model="draft.name" required maxlength="200" /></label
       ><label>級・区分<input v-model="draft.gradeOrCategory" maxlength="100" /></label>
       <fieldset>
@@ -127,7 +133,8 @@ async function close() {
       </div>
     </form>
     <template v-else
-      ><p class="qualification-grade">{{ q!.gradeOrCategory || '級・区分なし' }}</p>
+      ><p v-if="a" class="detail-result"><span class="result-badge passed">合格</span></p>
+      <p class="qualification-grade">{{ q!.gradeOrCategory || '級・区分なし' }}</p>
       <div class="tags">
         <span v-for="tag in TAGS.filter((t) => q!.fixedTagIds.includes(t.id))" :key="tag.id">{{
           tag.label
@@ -145,11 +152,42 @@ async function close() {
       <p v-if="!attempts.length" class="help">受験履歴はありません。</p>
       <ul class="detail-attempts">
         <li v-for="exam in attempts" :key="exam.id">
-          {{ formatDate(exam.examDate) }} <span>{{ resultLabel[exam.result] }}</span>
+          {{ formatDate(exam.examDate) }}
+          <span v-if="exam.result !== 'passed'" class="result-badge" :class="exam.result">{{
+            resultLabel[exam.result]
+          }}</span>
+          <div v-if="attemptActions" class="row-actions">
+            <button
+              type="button"
+              class="secondary compact"
+              :disabled="session.busy || !session.writable"
+              @click="emit('editAttempt', exam.id)"
+            >
+              訂正</button
+            ><button
+              type="button"
+              class="text-button danger compact"
+              :disabled="session.busy || !session.writable"
+              @click="emit('deleteAttempt', exam.id)"
+            >
+              削除
+            </button>
+          </div>
         </li>
       </ul>
-      <div class="actions wrap">
-        <button :disabled="!session.writable || session.busy" @click="addAttempt">
+      <div class="actions wrap detail-actions">
+        <button
+          type="button"
+          class="delete-icon"
+          aria-label="資格全体を削除"
+          title="資格全体を削除"
+          :disabled="!session.writable || session.busy"
+          @click="remove"
+        >
+          <svg viewBox="0 0 24 24" aria-hidden="true">
+            <path d="M3 6h18M9 6V3h6v3M5 6l1 15h12l1-15M10 10v7M14 10v7" />
+          </svg></button
+        ><button :disabled="!session.writable || session.busy" @click="addAttempt">
           受験・更新を追加</button
         ><button
           class="secondary"
@@ -163,13 +201,7 @@ async function close() {
           :disabled="!session.writable || session.busy"
           @click="undo"
         >
-          最新更新を取り消す</button
-        ><button
-          class="danger text-button"
-          :disabled="!session.writable || session.busy"
-          @click="remove"
-        >
-          資格全体を削除
+          最新更新を取り消す
         </button>
       </div></template
     >

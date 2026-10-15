@@ -4,4 +4,4 @@ import { useRouter } from 'vue-router'
 const router = useRouter()
 onMounted(() => router.replace('/qualifications'))
 </script>
-<template><p>保有資格一覧を開いています。</p></template>
+<template><p>あなたの資格一覧を開いています。</p></template>

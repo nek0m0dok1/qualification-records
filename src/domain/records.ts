@@ -73,12 +73,12 @@ export function linkedImpact(records: Records, attemptId: string): string {
   )
   if (!a) return '保有情報への変更はありません。'
   if (a.acquiredAttemptId === attemptId)
-    return 'この履歴は最初の取得の根拠です。取得年月と更新情報をすべて削除します。資格情報と他の履歴は残ります。'
+    return '取得年月・全更新情報も削除します。\n資格情報・他の受験履歴は残ります。'
   if (a.renewal?.attemptId === attemptId)
     return a.previousRenewal
       ? `最新更新を取り消し、${a.previousRenewal.month}の更新情報へ戻します。`
       : '最新の更新情報を削除します。取得年月は残ります。'
-  return 'この履歴は直前更新の根拠です。巻き戻し用の控えを削除します。'
+  return '直前更新の控えも削除します。'
 }
 function undoRenewal(a: Acquisition) {
   if (a.previousRenewal) a.renewal = structuredClone(a.previousRenewal)

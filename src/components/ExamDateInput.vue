@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref, useId, watch } from 'vue'
+import { computed, ref, useId, watch, onMounted, onUnmounted } from 'vue'
 import { validDate } from '../domain/validation'
 
 const props = withDefaults(
@@ -11,6 +11,7 @@ const id = useId(),
   open = ref(false),
   year = ref(2024),
   month = ref(1)
+const root = ref<HTMLElement>()
 const yearOptions = computed(() => Array.from({ length: 9999 }, (_, i) => i + 1))
 const monthOptions = Array.from({ length: 12 }, (_, i) => i + 1)
 const valuePattern = computed(() =>
@@ -40,10 +41,32 @@ watch(
     }
   },
 )
-function chooseMonth() {
-  emit('update:modelValue', calendarValue.value)
+function closeCalendar() {
+  if (!open.value) return
+  if (!props.allowDay || props.modelValue.slice(0, 7) !== calendarValue.value)
+    emit('update:modelValue', calendarValue.value)
   open.value = false
 }
+function outside(event: Event) {
+  if (event.target instanceof Node && !root.value?.contains(event.target)) closeCalendar()
+}
+function escape(event: KeyboardEvent) {
+  if (open.value && event.key === 'Escape') {
+    event.preventDefault()
+    event.stopPropagation()
+    closeCalendar()
+  }
+}
+onMounted(() => {
+  document.addEventListener('pointerdown', outside, true)
+  document.addEventListener('focusin', outside)
+  document.addEventListener('keydown', escape, true)
+})
+onUnmounted(() => {
+  document.removeEventListener('pointerdown', outside, true)
+  document.removeEventListener('focusin', outside)
+  document.removeEventListener('keydown', escape, true)
+})
 function chooseDay(day: number) {
   const value = `${calendarValue.value}-${String(day).padStart(2, '0')}`
   if (validDate(value, true)) emit('update:modelValue', value)
@@ -54,6 +77,10 @@ function clearDay() {
   open.value = false
 }
 function openCalendar() {
+  if (open.value) {
+    closeCalendar()
+    return
+  }
   const match = /^(\d{4})-(\d{2})/.exec(props.modelValue)
   if (match) {
     year.value = Number(match[1])
@@ -63,8 +90,8 @@ function openCalendar() {
 }
 </script>
 <template>
-  <div class="date-picker-control">
-    <label :for="id">{{ label }}<span class="required-marker" aria-hidden="true">*</span></label>
+  <div ref="root" class="date-picker-control">
+    <label :for="id">{{ label }}<span class="required-marker" aria-hidden="true"></span></label>
     <div class="date-input-row">
       <input
         :id="id"
@@ -85,7 +112,10 @@ function openCalendar() {
         :aria-label="`${label}カレンダーを開く`"
         @click="openCalendar"
       >
-        ▦
+        <svg viewBox="0 0 24 24" aria-hidden="true">
+          <rect x="3" y="5" width="18" height="16" rx="2" />
+          <path d="M7 3v4M17 3v4M3 10h18M7 14h2M12 14h2M17 14h1M7 18h2M12 18h2" />
+        </svg>
       </button>
     </div>
     <div
@@ -109,7 +139,10 @@ function openCalendar() {
         >
       </div>
       <template v-if="allowDay"
-        ><div class="calendar-weekdays" aria-hidden="true">
+        ><button type="button" class="text-button date-month-only" @click="clearDay">
+          年月のみで登録
+        </button>
+        <div class="calendar-weekdays" aria-hidden="true">
           <span v-for="d in ['日', '月', '火', '水', '木', '金', '土']" :key="d">{{ d }}</span>
         </div>
         <div class="calendar-days">
@@ -124,14 +157,8 @@ function openCalendar() {
           >
             {{ day }}
           </button>
-        </div>
-        <button type="button" class="text-button date-month-only" @click="clearDay">
-          年月のみで登録
-        </button></template
+        </div></template
       >
-      <button v-else type="button" class="secondary date-month-submit" @click="chooseMonth">
-        この年月を選択
-      </button>
     </div>
   </div>
 </template>
