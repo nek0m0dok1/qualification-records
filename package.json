@@ -5,6 +5,9 @@
   "type": "module",
   "scripts": {
     "dev": "vite --host 127.0.0.1",
+    "lint": "eslint src tests *.ts eslint.config.js",
+    "format": "prettier --write \"src/**/*.{ts,vue,css}\" \"tests/**/*.{ts,vue}\" \"*.ts\" eslint.config.js package.json .prettierrc.json",
+    "format:check": "prettier --check \"src/**/*.{ts,vue,css}\" \"tests/**/*.{ts,vue}\" \"*.ts\" eslint.config.js package.json .prettierrc.json",
     "typecheck": "vite build --mode types && vue-tsc --noEmit",
     "build": "vite build",
     "preview": "vite preview --host 127.0.0.1",
@@ -20,15 +23,50 @@
     "vue-router": "^5.0.0"
   },
   "devDependencies": {
+    "@eslint/js": "^10.0.1",
     "@firebase/rules-unit-testing": "^5.0.0",
     "@playwright/test": "^1.56.0",
     "@types/node": "^24.0.0",
     "@vitejs/plugin-vue": "^6.0.0",
+    "eslint": "^10.12.0",
+    "eslint-config-prettier": "^10.1.8",
+    "eslint-plugin-vue": "^10.11.1",
     "firebase-tools": "^15.0.0",
+    "globals": "^17.13.0",
+    "prettier": "^3.9.10",
     "typescript": "^5.9.0",
+    "typescript-eslint": "^8.71.1",
     "vite": "^7.0.0",
     "vite-plugin-pwa": "^1.0.0",
-    "vitest": "^3.2.0",
+    "vitest": "^4.1.11",
     "vue-tsc": "^3.0.0"
-  }
+  },
+  "overrides": {
+    "@grpc/grpc-js": "^1.14.6",
+    "@opentelemetry/core": "^2.8.0",
+    "firebase-tools": {
+      "basic-ftp": "^6.2.1",
+      "chokidar": "^4.0.3",
+      "gaxios": {
+        "uuid": "^11.1.1"
+      }
+    }
+  },
+  "description": "資格と取得年月、受験履歴を記録するVue 3・TypeScriptアプリです。認証とクラウド保存にFirebaseを使用し、利用者が選択した場合はFirestoreの永続キャッシュで取得済みの記録をオフライン閲覧できます。",
+  "main": "index.js",
+  "directories": {
+    "doc": "docs",
+    "test": "tests"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/nek0m0dok1/qualification-records.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/nek0m0dok1/qualification-records/issues"
+  },
+  "homepage": "https://github.com/nek0m0dok1/qualification-records#readme"
 }

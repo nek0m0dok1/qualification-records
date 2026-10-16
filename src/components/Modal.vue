@@ -10,7 +10,18 @@ onUnmounted(() => previous?.focus())
 </script>
 <template>
   <dialog ref="element" :aria-labelledby="titleId" @cancel.prevent="!busy && emit('close')">
-    <header class="modal-heading"><h2 :id="titleId">{{ title }}</h2><button type="button" class="icon-button" aria-label="閉じる" :disabled="busy" @click="emit('close')">×</button></header>
+    <header class="modal-heading">
+      <h2 :id="titleId">{{ title }}</h2>
+      <button
+        type="button"
+        class="icon-button"
+        aria-label="閉じる"
+        :disabled="busy"
+        @click="emit('close')"
+      >
+        ×
+      </button>
+    </header>
     <slot />
   </dialog>
 </template>
