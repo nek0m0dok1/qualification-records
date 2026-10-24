@@ -3,7 +3,10 @@ import { computed, ref, watch, onUnmounted } from 'vue'
 import { useRegisterSW } from 'virtual:pwa-register/vue'
 import { session, refresh, logout, retryCacheDeletion } from './state/session'
 import { configured, rememberDevice } from './services/firebase'
-import { ui, openWizard, closeDialog } from './state/ui'
+import { ui, closeDialog, openWizard } from './state/ui'
+import { filters } from './state/ui'
+import { useRoute } from 'vue-router'
+import { TAGS } from './domain/model'
 import Modal from './components/Modal.vue'
 import Wizard from './components/Wizard.vue'
 import AuthForm from './components/AuthForm.vue'
@@ -11,6 +14,11 @@ const sw = useRegisterSW({ immediate: true })
 const blocked = computed(() => session.cacheDeletionRequired)
 const updating = computed(() => session.busy || session.fetching)
 const accountOpen = ref(false)
+const route = useRoute()
+const filterOpen = ref(false)
+const tagSearch = ref('')
+const ownedFilter = filters.owned
+const visibleTags = computed(() => TAGS.filter((tag) => tag.label.includes(tagSearch.value.trim())))
 let messageTimer: ReturnType<typeof setTimeout> | undefined
 watch(
   () => session.message,
@@ -74,6 +82,17 @@ function accountLogout() {
         <RouterLink to="/qualifications">あなたの資格</RouterLink
         ><RouterLink to="/exam-attempts">受験履歴</RouterLink
         ><RouterLink to="/settings">設定・バックアップ</RouterLink>
+        <button
+          v-if="route.path === '/qualifications'"
+          type="button"
+          class="secondary filter-open"
+          :aria-expanded="filterOpen"
+          @click="filterOpen = true"
+        >
+          検索・絞り込み<span v-if="filters.owned.tags.length" class="filter-count">{{
+            filters.owned.tags.length
+          }}</span>
+        </button>
       </nav>
       <div class="workspace-content">
         <div class="status-bar">
@@ -112,7 +131,7 @@ function accountLogout() {
           画面のオフライン表示の準備が完了しました。記録は取得済みの範囲で表示します。
         </p>
         <main><RouterView /></main>
-        <footer>
+        <footer v-if="route.path !== '/qualifications'">
           <button class="secondary" :disabled="updating || !session.writable" @click="openWizard()">
             ＋ 記録を追加
           </button>
@@ -151,6 +170,59 @@ function accountLogout() {
           @click="accountLogout"
         >
           ログアウト
+        </button>
+      </div>
+    </Modal>
+    <Modal
+      v-if="filterOpen && route.path === '/qualifications'"
+      class="qualification-filter-dialog"
+      title="資格の検索・絞り込み"
+      @close="filterOpen = false"
+    >
+      <label
+        >資格名を検索<input
+          v-model="filters.owned.search"
+          type="search"
+          placeholder="資格名の一部を入力"
+      /></label>
+      <section class="selected-tags" aria-label="選択中のジャンル">
+        <h3>選択中のジャンル</h3>
+        <p v-if="!ownedFilter.tags.length" class="help">ジャンルは選択されていません</p>
+        <div class="selected-tag-list">
+          <span
+            v-for="tag in TAGS.filter((item) => ownedFilter.tags.includes(item.id))"
+            :key="tag.id"
+            class="selected-tag"
+          >
+            {{ tag.label }}
+            <button
+              type="button"
+              :aria-label="tag.label + 'を解除'"
+              @click="ownedFilter.tags = ownedFilter.tags.filter((id) => id !== tag.id)"
+            >
+              ×
+            </button>
+          </span>
+        </div>
+      </section>
+      <label
+        >ジャンルを検索<input v-model="tagSearch" type="search" placeholder="ジャンル名を入力"
+      /></label>
+      <p class="help">選択したすべてのジャンルに一致</p>
+      <div class="dialog-tag-options" role="group" aria-label="ジャンル候補">
+        <button
+          v-for="tag in visibleTags"
+          :key="tag.id"
+          type="button"
+          class="filter-chip"
+          :aria-pressed="filters.owned.tags.includes(tag.id)"
+          @click="
+            filters.owned.tags = filters.owned.tags.includes(tag.id)
+              ? filters.owned.tags.filter((id) => id !== tag.id)
+              : [...filters.owned.tags, tag.id]
+          "
+        >
+          {{ tag.label }}
         </button>
       </div>
     </Modal>
