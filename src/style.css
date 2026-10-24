@@ -1331,3 +1331,13 @@ select {
   gap: 10px;
   flex-wrap: wrap;
 }
+.password-input input {
+  padding-left: 13px !important;
+  padding-right: 52px !important;
+}
+.password-toggle {
+  left: auto;
+  right: 0;
+  width: 48px;
+  border-radius: 0 7px 7px 0;
+}
