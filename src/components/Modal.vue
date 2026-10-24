@@ -9,7 +9,12 @@ onMounted(() => element.value?.showModal())
 onUnmounted(() => previous?.focus())
 </script>
 <template>
-  <dialog ref="element" :aria-labelledby="titleId" @cancel.prevent="!busy && emit('close')">
+  <dialog
+    ref="element"
+    :aria-labelledby="titleId"
+    @cancel.prevent="!busy && emit('close')"
+    @keydown.esc.prevent="!busy && emit('close')"
+  >
     <header class="modal-heading">
       <h2 :id="titleId">{{ title }}</h2>
       <button

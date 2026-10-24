@@ -2,9 +2,9 @@
 import { computed, ref } from 'vue'
 import { session } from '../state/session'
 import { filters, openWizard } from '../state/ui'
+import { TAGS } from '../domain/model'
 import { ownedQualifications } from '../domain/records'
 
-import { TAGS } from '../domain/model'
 import QualificationDetail from '../components/QualificationDetail.vue'
 const filter = filters.owned
 const rows = computed(() =>
@@ -26,42 +26,12 @@ const selected = ref('')
       <button :disabled="!session.writable || session.busy" @click="openWizard()">
         ＋ 記録を追加
       </button>
-    </div>
-    <div class="filter-panel">
-      <label class="search-label"
-        >資格名を検索<input
-          v-model="filter.search"
-          type="search"
-          placeholder="資格名の一部を入力" /></label
-      ><label
+      <label
         >並び順<select v-model="filter.direction">
           <option value="desc">取得年月：新しい順</option>
           <option value="asc">取得年月：古い順</option>
         </select></label
       >
-      <details class="filter-accordion">
-        <summary>
-          ジャンルで絞り込み
-          <span v-if="filter.tags.length" class="filter-count">{{ filter.tags.length }}件選択</span>
-        </summary>
-        <p class="help">選択したすべてのタグに一致</p>
-        <div class="tag-options">
-          <button
-            v-for="tag in TAGS"
-            :key="tag.id"
-            type="button"
-            class="filter-chip"
-            :aria-pressed="filter.tags.includes(tag.id)"
-            @click="
-              filter.tags = filter.tags.includes(tag.id)
-                ? filter.tags.filter((id) => id !== tag.id)
-                : [...filter.tags, tag.id]
-            "
-          >
-            {{ tag.label }}
-          </button>
-        </div>
-      </details>
     </div>
     <p class="result-count">{{ rows.length }}件を表示</p>
     <div class="card-grid">
