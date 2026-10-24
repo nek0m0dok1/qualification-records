@@ -1341,3 +1341,36 @@ select {
   width: 48px;
   border-radius: 0 7px 7px 0;
 }
+.qualification-actions {
+  display: flex;
+  align-items: end;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 16px;
+  padding: 14px;
+  border: 1px solid #dfe5da;
+  border-radius: 12px;
+  background: #fff;
+}
+.qualification-actions > button {
+  min-height: 46px;
+  padding-inline: 22px;
+}
+.qualification-actions label {
+  width: min(270px, 55%);
+  margin: 0;
+}
+.qualification-actions select {
+  margin-top: 3px;
+}
+@media (max-width: 599px) {
+  .qualification-actions {
+    align-items: stretch;
+    flex-direction: column;
+    gap: 8px;
+    padding: 10px;
+  }
+  .qualification-actions label {
+    width: 100%;
+  }
+}

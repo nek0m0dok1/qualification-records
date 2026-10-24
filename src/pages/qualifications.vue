@@ -22,6 +22,11 @@ const selected = ref('')
       </div>
       <span class="count">{{ session.records.acquisitions.length }}<small>件の資格</small></span>
     </div>
+    <div class="qualification-actions">
+      <button :disabled="!session.writable || session.busy" @click="openWizard()">
+        ＋ 記録を追加
+      </button>
+    </div>
     <div class="filter-panel">
       <label class="search-label"
         >資格名を検索<input

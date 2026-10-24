@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, ref, watch, onUnmounted } from 'vue'
+import { useRoute } from 'vue-router'
 import { useRegisterSW } from 'virtual:pwa-register/vue'
 import { session, refresh, logout, retryCacheDeletion } from './state/session'
 import { configured, rememberDevice } from './services/firebase'
@@ -11,6 +12,7 @@ const sw = useRegisterSW({ immediate: true })
 const blocked = computed(() => session.cacheDeletionRequired)
 const updating = computed(() => session.busy || session.fetching)
 const accountOpen = ref(false)
+const route = useRoute()
 let messageTimer: ReturnType<typeof setTimeout> | undefined
 watch(
   () => session.message,
@@ -112,7 +114,7 @@ function accountLogout() {
           画面のオフライン表示の準備が完了しました。記録は取得済みの範囲で表示します。
         </p>
         <main><RouterView /></main>
-        <footer>
+        <footer v-if="route.path !== '/qualifications'">
           <button class="secondary" :disabled="updating || !session.writable" @click="openWizard()">
             ＋ 記録を追加
           </button>
