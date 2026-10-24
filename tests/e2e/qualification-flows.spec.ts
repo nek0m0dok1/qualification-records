@@ -79,6 +79,7 @@ test('主要フロー: 取り消し後の訂正年月と自己削除・別画面
   expect(verified.ok(), await verified.text()).toBeTruthy()
 
   await page.goto('/login')
+  await page.setViewportSize({ width: 719, height: 611 })
   await page.getByLabel('メールアドレス').fill(email)
   const passwordInput = page.getByLabel('パスワード', { exact: true })
   await passwordInput.fill(password)
@@ -86,6 +87,14 @@ test('主要フロー: 取り消し後の訂正年月と自己削除・別画面
   await page.getByRole('button', { name: 'パスワードを表示', exact: true }).click()
   await expect(passwordInput).toHaveAttribute('type', 'text')
   await expect(passwordInput).toHaveValue(password)
+  await page.getByLabel('メールアドレス').fill('sample@example.test')
+  await passwordInput.fill('sample-password')
+  await page.screenshot({
+    path: 'docs/assets/issue-12-password-toggle-719x611.png',
+    fullPage: true,
+  })
+  await page.getByLabel('メールアドレス').fill(email)
+  await passwordInput.fill(password)
   await page.getByRole('button', { name: 'パスワードを非表示', exact: true }).click()
   await expect(passwordInput).toHaveAttribute('type', 'password')
   await page.getByLabel('ログイン状態を記憶する').check()
@@ -104,14 +113,164 @@ test('主要フロー: 取り消し後の訂正年月と自己削除・別画面
     rememberedTab.getByRole('button', { name: '記録を再取得', exact: true }),
   ).toBeEnabled({ timeout: 15_000 })
   await rememberedTab.close()
-  const filters = page.locator('.filter-accordion')
-  await expect(filters).not.toHaveAttribute('open', '')
-  await filters.locator('summary').click()
-  const languageChip = filters.getByRole('button', { name: '語学', exact: true })
+  await page.setViewportSize({ width: 719, height: 607 })
+  const nav = page.getByRole('navigation', { name: '主要画面' })
+  await expect(nav).toBeVisible()
+  await expect(nav.getByRole('link', { name: 'あなたの資格' })).toHaveAttribute(
+    'aria-current',
+    'page',
+  )
+  const navBox = await nav.boundingBox()
+  const mainBox = await page.locator('.workspace-content').boundingBox()
+  expect(navBox && mainBox && navBox.x >= mainBox.x + mainBox.width).toBeTruthy()
+  const filterTrigger = nav.getByRole('button', { name: /検索・絞り込み/ })
+  await filterTrigger.focus()
+  await page.keyboard.press('Enter')
+  const filterDialog = page.getByRole('dialog', { name: '資格の検索・絞り込み' })
+  await expect(filterDialog).toBeVisible()
+  const genreOptions = filterDialog.locator('.dialog-tag-options button')
+  const genreCount = await genreOptions.count()
+  for (let index = 0; index < genreCount; index += 1) await genreOptions.nth(index).click()
+  await expect(filterDialog.locator('.selected-tag')).toHaveCount(genreCount)
+  await expect(filterDialog.locator('.modal-heading')).toBeInViewport()
+  await expect(filterDialog.getByLabel('資格名を検索')).toBeInViewport()
+  await expect(filterDialog.locator('.selected-tags')).toBeInViewport()
+  await expect(filterDialog.getByLabel('ジャンルを検索')).toBeInViewport()
+  await page.setViewportSize({ width: 640, height: 360 })
+  await expect(filterDialog.locator('.modal-heading')).toBeInViewport()
+  await expect(filterDialog.getByRole('button', { name: '閉じる' })).toBeInViewport()
+  await expect(filterDialog.getByLabel('資格名を検索')).toBeInViewport()
+  await expect(filterDialog.getByLabel('ジャンルを検索')).toBeInViewport()
+  const selectedRemoval = filterDialog.locator('.selected-tag button').first()
+  await expect(selectedRemoval).toBeInViewport()
+  const candidateBounds = await filterDialog.locator('.dialog-tag-options').evaluate((list) => {
+    const listRect = list.getBoundingClientRect()
+    const dialogRect = list.closest('dialog')!.getBoundingClientRect()
+    return {
+      inside: listRect.top >= dialogRect.top && listRect.bottom <= dialogRect.bottom,
+      height: listRect.height,
+    }
+  })
+  expect(
+    candidateBounds.inside && candidateBounds.height >= 40,
+    JSON.stringify(candidateBounds),
+  ).toBeTruthy()
+  await selectedRemoval.click()
+  await expect(
+    filterDialog.locator('.dialog-tag-options button:not([aria-pressed="true"])').first(),
+  ).toBeVisible()
+  await filterDialog
+    .locator('.dialog-tag-options button:not([aria-pressed="true"])')
+    .first()
+    .click()
+  await expect(filterDialog.locator('.selected-tag')).toHaveCount(genreCount)
+  await filterDialog
+    .locator('.selected-tag button')
+    .evaluateAll((buttons) => buttons.forEach((button) => (button as HTMLButtonElement).click()))
+  await page.evaluate(() => {
+    const candidates = document.querySelector('.dialog-tag-options')!
+    const selected = document.querySelector('.selected-tag-list')!
+    for (let index = 0; index < 100; index += 1) {
+      candidates.append(document.createElement('button'))
+      const tag = document.createElement('span')
+      tag.textContent = `Synthetic selected genre ${index}`
+      selected.append(tag)
+    }
+  })
+  await expect(filterDialog.locator('.dialog-tag-options')).toBeInViewport()
+  await expect(filterDialog.locator('.selected-tags')).toBeInViewport()
+  await expect(filterDialog.locator('.selected-tag-list')).toBeInViewport()
+  await expect(filterDialog.getByLabel('資格名を検索')).toBeInViewport()
+  await expect(filterDialog.getByLabel('ジャンルを検索')).toBeInViewport()
+  await page.setViewportSize({ width: 640, height: 360 })
+  await expect(filterDialog.locator('.modal-heading')).toBeInViewport()
+  await expect(filterDialog.getByRole('button', { name: '閉じる' })).toBeInViewport()
+  await expect(filterDialog.getByLabel('資格名を検索')).toBeInViewport()
+  await expect(filterDialog.getByLabel('ジャンルを検索')).toBeInViewport()
+  await expect(filterDialog.locator('.selected-tag-list')).toBeInViewport()
+  const selectedListOverflow = await filterDialog.locator('.selected-tag-list').evaluate((list) => ({
+    scroll: list.scrollHeight,
+    client: list.clientHeight,
+  }))
+  expect(selectedListOverflow.scroll).toBeGreaterThan(selectedListOverflow.client)
+  await expect(filterDialog.locator('.dialog-tag-options')).toBeInViewport()
+  const denseCandidateBounds = await filterDialog
+    .locator('.dialog-tag-options')
+    .evaluate((list) => {
+      const listRect = list.getBoundingClientRect()
+      const dialogRect = list.closest('dialog')!.getBoundingClientRect()
+      return listRect.top >= dialogRect.top && listRect.bottom <= dialogRect.bottom
+    })
+  expect(denseCandidateBounds).toBeTruthy()
+  await filterDialog.getByRole('searchbox', { name: 'ジャンルを検索' }).fill('語学')
+  await expect(filterDialog.getByRole('button', { name: '語学', exact: true })).toBeVisible()
+  await filterDialog.getByRole('searchbox', { name: 'ジャンルを検索' }).fill('')
+  await page.setViewportSize({ width: 390, height: 640 })
+  await expect(filterDialog.locator('.modal-heading')).toBeInViewport()
+  await expect(filterDialog.getByLabel('資格名を検索')).toBeInViewport()
+  await expect(filterDialog.locator('.selected-tags')).toBeInViewport()
+  await expect(filterDialog.getByLabel('ジャンルを検索')).toBeInViewport()
+  await page.setViewportSize({ width: 719, height: 607 })
+  const overflow = await page.locator('.dialog-tag-options, .selected-tag-list').evaluateAll((lists) =>
+    lists.map((list) => ({ scroll: list.scrollHeight, client: list.clientHeight })),
+  )
+  expect(overflow.every(({ scroll, client }) => scroll > client)).toBeTruthy()
+  await page.evaluate(() => {
+    document.querySelectorAll('.dialog-tag-options button:empty').forEach((button) => button.remove())
+    document
+      .querySelectorAll('.selected-tag-list > span:not(.selected-tag)')
+      .forEach((tag) => tag.remove())
+  })
+  await page.addStyleTag({ content: '.account small { visibility: hidden; }' })
+  await page.screenshot({ path: 'docs/assets/issue-15-filter-dialog-719x607.png', fullPage: true })
+  await expect(filterDialog.getByRole('combobox')).toHaveCount(0)
+  const languageChip = filterDialog.getByRole('button', { name: '語学', exact: true })
   await languageChip.click()
   await expect(languageChip).toHaveAttribute('aria-pressed', 'true')
-  await languageChip.click()
-  await expect(languageChip).toHaveAttribute('aria-pressed', 'false')
+  await filterDialog.getByRole('searchbox', { name: 'ジャンルを検索' }).fill('no matching genre')
+  await expect(filterDialog.getByRole('button', { name: '語学を解除' })).toBeVisible()
+  await page.setViewportSize({ width: 640, height: 360 })
+  await expect(filterDialog.locator('.modal-heading')).toBeInViewport()
+  await expect(filterDialog.getByLabel('資格名を検索')).toBeInViewport()
+  await expect(filterDialog.getByLabel('ジャンルを検索')).toBeInViewport()
+  await page.keyboard.press('Escape')
+  await expect(filterDialog).toHaveCount(0)
+  await expect(filterTrigger).toBeFocused()
+  await expect(page.getByText('0件を表示')).toBeVisible()
+  await expect(page.getByRole('button', { name: '＋ 記録を追加' })).toBeVisible()
+  const footerAdd = page.locator('footer').getByRole('button', { name: '＋ 記録を追加' })
+  for (const path of ['/exam-attempts', '/settings']) {
+    await nav.locator(`a[href="${path}"]`).click()
+    await expect(page).toHaveURL(new RegExp(`${path}$`))
+    await expect(page.locator(`a[href="${path}"]`)).toHaveAttribute('aria-current', 'page')
+    await expect(footerAdd).toBeVisible()
+    await expect(footerAdd).toBeEnabled()
+    await footerAdd.click()
+    const startWizard = page.getByRole('dialog', { name: '資格・受験の記録' })
+    await expect(startWizard).toBeVisible()
+    await startWizard.locator('header').getByRole('button').click()
+    await expect(startWizard).toHaveCount(0)
+  }
+  await nav.locator('a[href="/qualifications"]').last().click()
+  await expect(nav.getByRole('link', { name: 'あなたの資格' })).toHaveAttribute('aria-current', 'page')
+  await expect(page.locator('footer')).toHaveCount(0)
+  await page.setViewportSize({ width: 719, height: 611 })
+  const narrowLayout = await page.evaluate(() => ({
+    viewport: document.documentElement.clientWidth,
+    scrollWidth: document.documentElement.scrollWidth,
+  }))
+  expect(narrowLayout.scrollWidth).toBeLessThanOrEqual(narrowLayout.viewport)
+  await page.setViewportSize({ width: 390, height: 640 })
+  const mobileLayout = await page.evaluate(() => ({
+    viewport: document.documentElement.clientWidth,
+    scrollWidth: document.documentElement.scrollWidth,
+  }))
+  expect(mobileLayout.scrollWidth).toBeLessThanOrEqual(mobileLayout.viewport)
+  await filterTrigger.click()
+  await expect(page.getByRole('button', { name: '語学を解除' })).toBeVisible()
+  await page.getByRole('button', { name: '語学を解除' }).click()
+  await expect(page.getByText('ジャンルは選択されていません')).toBeVisible()
+  await page.keyboard.press('Escape')
   await expect(page.locator('.connection-dot')).toHaveClass(/online/)
   await page.getByRole('button', { name: '＋ 記録を追加' }).click()
   await page.getByLabel('新資格の登録').check()
@@ -127,6 +286,14 @@ test('主要フロー: 取り消し後の訂正年月と自己削除・別画面
   await page.getByRole('button', { name: '閉じて破棄する' }).click()
   await expect(wizard).toHaveCount(0)
   await registerQualification(page, 'E2E削除資格', '2022-01')
+  await filterTrigger.click()
+  const qualificationSearch = page.getByRole('searchbox', { name: '資格名を検索' })
+  await qualificationSearch.fill('E2E削除資格')
+  await expect(page.getByRole('button', { name: /E2E削除資格/ })).toBeVisible()
+  await qualificationSearch.fill('no matching qualification')
+  await expect(page.locator('.qualification-card')).toHaveCount(0)
+  await qualificationSearch.fill('')
+  await page.keyboard.press('Escape')
   const correctionDetail = page.getByRole('dialog', { name: 'E2E削除資格' })
   await page.getByRole('button', { name: /E2E削除資格/ }).click()
   await correctionDetail.getByRole('button', { name: '情報を訂正' }).click()
