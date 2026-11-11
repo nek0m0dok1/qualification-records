@@ -1,0 +1,42 @@
+{
+  "archive_date": "2026-11-11",
+  "note": "Historical snapshots; not current requirements.",
+  "entries": [
+    {
+      "source_commit": "014996e73d425940c773fd2a13bb29a1e8b478a1",
+      "source_path": "docs/PRD.md",
+      "archive_path": "working/docs/PRD.md",
+      "sha256": "e14fa1e93c3acfb180e79bf08c94f5a7398432fbf7e533f8dddf84ff2535ecb4",
+      "reason": "Edited to align current documentation with main implementation and record current verification separately."
+    },
+    {
+      "source_commit": "014996e73d425940c773fd2a13bb29a1e8b478a1",
+      "source_path": "docs/plan.md",
+      "archive_path": "working/docs/plan.md",
+      "sha256": "88dc8bf4cab09ade058f5c9d53575192462d00e1fdfcf770eba49e4eebb3daac",
+      "reason": "Edited to align current documentation with main implementation and record current verification separately."
+    },
+    {
+      "source_commit": "014996e73d425940c773fd2a13bb29a1e8b478a1",
+      "source_path": "docs/database/data-model.md",
+      "archive_path": "working/docs/database/data-model.md",
+      "sha256": "63979ee0e29040504c1845a0bd0f7c2da9dae7f5208493bf237f6c8524b98b3f",
+      "reason": "Edited to align current documentation with main implementation and record current verification separately."
+    },
+    {
+      "source_commit": "014996e73d425940c773fd2a13bb29a1e8b478a1",
+      "source_path": "docs/database/data-handling.md",
+      "archive_path": "working/docs/database/data-handling.md",
+      "sha256": "5f5c4eac5b964b4e82b95d495735b3ec5b6f0941f6d677e07edfabde787f12e1",
+      "reason": "Edited to align current documentation with main implementation and record current verification separately."
+    },
+    {
+      "source_commit": "4a52f63830c0ab3d19f0d0f03e31cb3bf57f0e2e",
+      "source_blob": "24e6e2c34e7019a273419e0a6d017190c0e93fd7",
+      "source_path": "docs/plan.md",
+      "archive_path": "main/docs/plan.md",
+      "sha256": "14efbc5b184184414205011be187e61d90cc22ddf9daa4f47def1b4a5b75fe55",
+      "reason": "Main differs from working branch; preserve main wording and history before synchronizing docs."
+    }
+  ]
+}

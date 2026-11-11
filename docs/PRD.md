@@ -1,4 +1,11 @@
+---
+name: Qualification product requirements
+discription: Records product goals and confirmed requirements. Implementation state and verification evidence are tracked separately in implementation-status.md.
+---
+
 # 資格管理アプリ　PRD
+
+> Document status: requirements baseline. Updated: 2026-11-11. Scope: product requirements. This document does not claim that every requirement is implemented. See [implementation status](implementation-status.md) for the main snapshot and unmerged work.
 
 ねこもどき
 
@@ -58,8 +65,8 @@
 3. 情報確認
 
 # Mockup
-![mockup](/docs/assets/image.png)
-# OpenQuestion
+Mockup image is unavailable in the current docs/assets directory; no image is linked here.
+# Open Questions
 
 * 「資格確認しなきゃ」と思ったときに、このツールを思い出してもらえるのか？  
 * タグ付け自体が面倒

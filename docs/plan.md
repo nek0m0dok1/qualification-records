@@ -1,4 +1,11 @@
+---
+name: Development plan
+discription: Records the original delivery plan, accepted design direction, and validation plan. Current implementation state is tracked in implementation-status.md.
+---
+
 # 資格管理アプリ：Codexによる実装と35日間の開発計画
+
+> Document status: plan and accepted direction. Updated: 2026-11-11. Scope: development schedule and validation approach. The schedule is the original plan, not a current progress report. See [implementation status](implementation-status.md).
 
 ## 1. 目的と完成条件
 
@@ -102,10 +109,8 @@ Firestoreの保存領域を利用者ごとのデータセットに分け、有�
 - Sparkプランを前提に、Firestore Standard版を計画上の既定とする。実装開始時に実際のプロジェクト・版・無料枠を確認し、無断で課金へ変更しない。
 - 審査用アカウントはメール確認済みの通常権限で用意し、架空の資格・履歴を登録する。認証情報はコードや公開スライドへ記載せず、提出先の指定方法で渡す。
 
-## 初回実装の進行状況
+The custom domain remains deferred; the standard Firebase Hosting URL is used. The user creates the presentation; Codex does not. Preserve these scope decisions when using this original schedule.
 
-初回実装では、Vue 3・TypeScript・Vite、Firebase Authentication・Cloud Firestore、画面、登録・訂正・削除、検索・絞り込み、JSON全置換、オフライン閲覧用のPWAシェルを実装した。型チェック・ドメイン単体テスト7件・本番ビルドは成功した。本番ビルドにはFirestoreのチャンクサイズ警告がある。Firebase Emulator上のSecurity Rules検証はJavaが環境にないため未実施。Firebase実プロジェクトを接続した認証・保存とブラウザー実機のオフライン動作も、接続設定後に検証が必要である。
+## Implementation status reference
 
-ドメイン取得は保留し、Firebase Hostingの標準URLを使う。スライドは利用者が作成し、Codexは作成しない。初回実装の完了報告では、未実施の審査・コードレビューを実施済みと扱わない。
-
-復元の切替結果が不明な場合の保留状態、UIDごとの永続化、サーバー確認による成功・未切替・競合判定を実装した。未切替の解除では切替先を終結させて利用者更新番号を進め、cleanup後も遅延した準備・切替を拒否する。端末状態の破損・利用不能時は変更を停止し、同一UIDの複数タブの開始・終了と通常変更をロックで直列化する。復元確認ダイアログの前後とロック取得後にUID・head・選択ファイル・利用可否を再検証する。対応する単体テスト、型チェック・lintは成功し、確認待ち中の画面更新を検証するE2E回帰テストを追加したが未実行である。
+The dated first-implementation notes below this point were stale and have been replaced by [implementation-status.md](implementation-status.md), which separates main from unmerged changes and records validation evidence.

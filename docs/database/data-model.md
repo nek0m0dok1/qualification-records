@@ -1,4 +1,11 @@
+---
+name: Qualification data model
+discription: Defines the fields, types, relationships, and storage structure for qualification records. See data-handling.md for validation rules.
+---
+
 # 資格管理アプリ：データモデル
+
+> Document status: data model baseline. Updated: 2026-11-11. Scope: persisted records and identifiers. See [implementation status](../implementation-status.md) for main and unmerged implementation evidence.
 
 本書は、保存するデータの項目・型・関係を定義する。登録・検証・表示・保存のルールは `data-handling.md` を参照する。
 
