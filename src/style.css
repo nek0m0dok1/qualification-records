@@ -157,7 +157,7 @@ legend {
   padding: 0 40px;
 }
 .workspace-content {
-  padding-bottom: 5px;
+  padding-bottom: 18px;
 }
 .app-header {
   height: 104px;
@@ -729,6 +729,9 @@ dd {
   .card-grid {
     grid-template-columns: 1fr;
     gap: 12px;
+  }
+  .workspace-content {
+    padding-bottom: 12px;
   }
   .qualification-card {
     min-height: 190px;
