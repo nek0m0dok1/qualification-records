@@ -7,25 +7,30 @@ export interface PendingRestore {
   targetDatasetId: string
 }
 
+type RestoreFailureReason = 'read' | 'corrupt' | 'write'
 export type RestoreState =
   | { kind: 'clear' }
   | { kind: 'pending'; operation: PendingRestore }
-  | { kind: 'unavailable'; reason: 'read' | 'corrupt' | 'write' }
+  | { kind: 'unavailable'; reasons: RestoreFailureReason[] }
 
 const key = (uid: string) => `qr:restore-pending:${uid}`
 const mutationLock = (uid: string) => `qr:mutation:${uid}`
-const probeKey = (uid: string) => `qr:restore-probe:${uid}`
-const probeValue = 'qualification-records:restore-probe:v1'
+const probeKey = (uid: string, nonce: string) => `qr:restore-probe:${uid}:${nonce}`
 export const restoreState = reactive({
   pending: null as PendingRestore | null,
   unavailableUid: null as string | null,
-  unavailableByUid: {} as Record<string, 'read' | 'corrupt' | 'write'>,
+  unavailableByUid: {} as Record<string, RestoreFailureReason[]>,
 })
 let observedUid: string | null = null
 
-function markUnavailable(uid: string, reason: 'read' | 'corrupt' | 'write') {
-  restoreState.unavailableByUid[uid] = reason
+function markUnavailable(uid: string, reason: RestoreFailureReason) {
+  const reasons = (restoreState.unavailableByUid[uid] ??= [])
+  if (!reasons.includes(reason)) reasons.push(reason)
   restoreState.unavailableUid = uid
+}
+
+function unavailable(uid: string): RestoreState {
+  return { kind: 'unavailable', reasons: [...(restoreState.unavailableByUid[uid] ?? [])] }
 }
 
 function parse(uid: string, value: string): PendingRestore {
@@ -45,19 +50,18 @@ function parse(uid: string, value: string): PendingRestore {
 
 export function restoreStatus(uid: string): RestoreState {
   observedUid = uid
-  const unavailable = restoreState.unavailableByUid[uid]
-  if (unavailable) return { kind: 'unavailable', reason: unavailable }
+  if (restoreState.unavailableByUid[uid]?.length) return unavailable(uid)
   let value: string | null
   try {
     value = localStorage.getItem(key(uid))
   } catch {
     markUnavailable(uid, 'read')
-    return { kind: 'unavailable', reason: 'read' }
+    return unavailable(uid)
   }
   if (value === null) {
     if (restoreState.pending?.uid === uid) {
       markUnavailable(uid, 'corrupt')
-      return { kind: 'unavailable', reason: 'corrupt' }
+      return unavailable(uid)
     }
     restoreState.pending = null
     if (restoreState.unavailableUid === uid) restoreState.unavailableUid = null
@@ -69,7 +73,7 @@ export function restoreStatus(uid: string): RestoreState {
     return { kind: 'pending', operation: pending }
   } catch {
     markUnavailable(uid, 'corrupt')
-    return { kind: 'unavailable', reason: 'corrupt' }
+    return unavailable(uid)
   }
 }
 
@@ -82,7 +86,7 @@ export async function recheckRestoreState(uid: string): Promise<RestoreState> {
         value = localStorage.getItem(key(uid))
       } catch {
         markUnavailable(uid, 'read')
-        return { kind: 'unavailable', reason: 'read' }
+        return unavailable(uid)
       }
 
       let pending: PendingRestore | null = null
@@ -91,28 +95,52 @@ export async function recheckRestoreState(uid: string): Promise<RestoreState> {
           pending = parse(uid, value)
         } catch {
           markUnavailable(uid, 'corrupt')
-          return { kind: 'unavailable', reason: 'corrupt' }
+          return unavailable(uid)
         }
       } else if (restoreState.pending?.uid === uid) {
         markUnavailable(uid, 'read')
-        return { kind: 'unavailable', reason: 'read' }
+        return unavailable(uid)
       }
 
-      if (restoreState.unavailableByUid[uid] === 'write') {
-        const probe = probeKey(uid)
+      if (restoreState.unavailableByUid[uid]?.includes('write')) {
+        // A previous probe may be stale, so this check must prove this attempt's write.
+        const nonce = crypto.randomUUID()
+        const probe = probeKey(uid, nonce)
         try {
-          const existing = localStorage.getItem(probe)
-          if (existing === null) localStorage.setItem(probe, probeValue)
-          else if (existing !== probeValue) {
-            markUnavailable(uid, 'write')
-            return { kind: 'unavailable', reason: 'write' }
-          }
-          if (localStorage.getItem(probe) !== probeValue) throw new Error('probe write failed')
-          localStorage.removeItem(probe)
-          if (localStorage.getItem(probe) !== null) throw new Error('probe removal failed')
+          localStorage.setItem(probe, nonce)
         } catch {
           markUnavailable(uid, 'write')
-          return { kind: 'unavailable', reason: 'write' }
+          return unavailable(uid)
+        }
+        let written: string | null
+        try {
+          written = localStorage.getItem(probe)
+        } catch {
+          markUnavailable(uid, 'read')
+          markUnavailable(uid, 'write')
+          return unavailable(uid)
+        }
+        if (written !== nonce) {
+          markUnavailable(uid, 'write')
+          return unavailable(uid)
+        }
+        try {
+          localStorage.removeItem(probe)
+        } catch {
+          markUnavailable(uid, 'write')
+          return unavailable(uid)
+        }
+        let remaining: string | null
+        try {
+          remaining = localStorage.getItem(probe)
+        } catch {
+          markUnavailable(uid, 'read')
+          markUnavailable(uid, 'write')
+          return unavailable(uid)
+        }
+        if (remaining !== null) {
+          markUnavailable(uid, 'write')
+          return unavailable(uid)
         }
       }
 
@@ -123,7 +151,7 @@ export async function recheckRestoreState(uid: string): Promise<RestoreState> {
     })
   } catch {
     markUnavailable(uid, 'read')
-    return { kind: 'unavailable', reason: 'read' }
+    return unavailable(uid)
   }
 }
 

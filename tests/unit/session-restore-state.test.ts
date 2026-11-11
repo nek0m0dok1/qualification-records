@@ -65,7 +65,7 @@ describe('session mutations while restore state is unavailable', () => {
       reserveRestore('alice', { activeDatasetId: 'active', revision: 3 }, 'target'),
     ).rejects.toThrow()
     failWrites = false
-    expect(restoreStatus('alice')).toEqual({ kind: 'unavailable', reason: 'write' })
+    expect(restoreStatus('alice')).toEqual({ kind: 'unavailable', reasons: ['write'] })
 
     session.user = { uid: 'alice', emailVerified: true } as never
     session.loaded = {
