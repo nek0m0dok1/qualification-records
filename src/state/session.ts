@@ -3,7 +3,7 @@ import { onAuthStateChanged, signOut, reload, getIdToken, type User } from 'fire
 import { auth, eraseCache, storageGet, storageSet, storageRemove } from '../services/firebase'
 import { Repository, type Loaded } from '../services/repository'
 import { emptyRecords, type Records } from '../domain/model'
-import { restorePending } from './restore'
+import { restoreStatus } from './restore'
 export const session = reactive({
   user: null as User | null,
   ready: false,
@@ -74,11 +74,15 @@ export function refresh(): Promise<void> {
       }
       const loaded = await repo.load()
       if (token !== epoch) return
+      const restore = restoreStatus(user.uid)
       session.loaded = loaded
       session.records = loaded.records
-      session.writable = !restorePending(user.uid)
+      session.writable = restore.kind === 'clear'
       session.cacheOnly = false
-      session.error = ''
+      session.error =
+        restore.kind === 'unavailable'
+          ? '端末の復元状態を確認できないため、通常変更と復元を停止しています。ブラウザーの保存領域を利用可能にして再読み込みしてください。'
+          : ''
       session.lastFetched = new Date().toISOString()
       storageSet(`qr:fetched:${user.uid}`, session.lastFetched)
       void repo.cleanup().catch(() => {
@@ -114,7 +118,7 @@ export function refresh(): Promise<void> {
 export async function changeRecords(transform: (records: Records) => Records): Promise<boolean> {
   if (
     !session.user ||
-    restorePending(session.user.uid) ||
+    restoreStatus(session.user.uid).kind !== 'clear' ||
     !session.loaded ||
     !session.writable ||
     !navigator.onLine ||
@@ -200,6 +204,20 @@ export function startSession() {
     session.cacheOnly = true
   })
   window.addEventListener('online', () => void refresh())
+  window.addEventListener('storage', (event) => {
+    const uid = session.user?.uid
+    if (!uid || (event.key !== null && event.key !== `qr:restore-pending:${uid}`)) return
+    const state = restoreStatus(uid)
+    if (state.kind !== 'clear') {
+      session.writable = false
+      session.error =
+        state.kind === 'unavailable'
+          ? '端末の復元状態を確認できないため、通常変更と復元を停止しています。保存領域を確認してください。'
+          : '別のタブで復元を開始しました。先にサーバー状態を確認してください。'
+    } else {
+      void refresh()
+    }
+  })
   document.addEventListener('visibilitychange', () => {
     if (document.visibilityState === 'visible') void refresh()
   })

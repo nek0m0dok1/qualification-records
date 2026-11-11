@@ -25,7 +25,11 @@ export type RestoreStatus = 'switched' | 'not-switched' | 'conflict'
 const kinds = ['qualifications', 'examAttempts', 'acquisitions'] as const
 const equal = (a: Head, b: Head) =>
   a.activeDatasetId === b.activeDatasetId && a.revision === b.revision
-export function classifyRestore(expected: Head, targetDatasetId: string, current: Head): RestoreStatus {
+export function classifyRestore(
+  expected: Head,
+  targetDatasetId: string,
+  current: Head,
+): RestoreStatus {
   if (current.activeDatasetId === targetDatasetId && current.revision === expected.revision + 1)
     return 'switched'
   if (equal(expected, current)) return 'not-switched'
@@ -57,7 +61,7 @@ export class Repository {
     expected: Head,
     backup: Backup,
     progress: (message: string) => void = () => {},
-    targetDatasetId = crypto.randomUUID(),
+    targetDatasetId: string = crypto.randomUUID(),
   ) {
     await this.replace(expected, backupRecords(backup), progress, targetDatasetId)
   }
@@ -153,6 +157,7 @@ export class Repository {
       if (meta.data().status !== 'retired') {
         tx.update(this.set(targetDatasetId), { status: 'retired' })
       }
+      tx.update(this.user(), { revision: expected.revision + 1 })
       return 'not-switched' as const
     })
     if (first !== 'fence-needed') return first
@@ -162,9 +167,13 @@ export class Repository {
       if (!root.exists()) return 'conflict' as const
       const status = classifyRestore(expected, targetDatasetId, root.data() as Head)
       if (status !== 'not-switched') return status
-      if (!meta.exists()) return 'conflict' as const
+      if (!meta.exists()) {
+        tx.update(this.user(), { revision: expected.revision + 1 })
+        return 'not-switched' as const
+      }
       if (meta.data().status !== 'retired')
         tx.update(this.set(targetDatasetId), { status: 'retired' })
+      tx.update(this.user(), { revision: expected.revision + 1 })
       return 'not-switched' as const
     })
   }
@@ -172,7 +181,7 @@ export class Repository {
     expected: Head,
     records: Records,
     progress: (message: string) => void = () => {},
-    targetDatasetId = crypto.randomUUID(),
+    targetDatasetId: string = crypto.randomUUID(),
   ) {
     validateRecords(records)
     const id = targetDatasetId
@@ -180,7 +189,8 @@ export class Repository {
       const root = await tx.get(this.user())
       if (!root.exists() || !equal(expected, root.data() as Head))
         fail('既存記録が変更されています。更新して復元をやり直してください。')
-      if ((await tx.get(this.set(id))).exists()) fail('この復元操作はすでに終了しています。状態を確認してください。')
+      if ((await tx.get(this.set(id))).exists())
+        fail('この復元操作はすでに終了しています。状態を確認してください。')
       tx.set(this.set(id), {
         status: 'building',
         createdAt: new Date().toISOString(),

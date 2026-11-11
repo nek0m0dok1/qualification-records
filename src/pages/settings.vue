@@ -5,11 +5,26 @@ import { ask } from '../state/ui'
 import { rememberDevice, storageSet } from '../services/firebase'
 import { makeBackup, parseBackup, type Backup } from '../domain/backup'
 import { Repository } from '../services/repository'
-import { beginRestore, finishRestore, restorePending } from '../state/restore'
+import { finishRestore, reserveRestore, restoreState, restoreStatus } from '../state/restore'
 const candidate = ref<Backup | null>(null),
   progress = ref('')
-const pending = computed(() => session.user ? restorePending(session.user.uid) : null)
-const disabled = computed(() => session.busy || session.fetching || !session.writable || !!pending.value)
+const restoreStateForUser = computed(() => {
+  void restoreState.pending
+  void restoreState.unavailableUid
+  return session.user ? restoreStatus(session.user.uid) : { kind: 'clear' as const }
+})
+const pending = computed(() =>
+  restoreStateForUser.value.kind === 'pending' ? restoreStateForUser.value.operation : null,
+)
+const restoreUnavailable = computed(() => restoreStateForUser.value.kind === 'unavailable')
+const disabled = computed(
+  () =>
+    session.busy ||
+    session.fetching ||
+    !session.writable ||
+    !!pending.value ||
+    restoreUnavailable.value,
+)
 async function exportJson() {
   if (!session.user || disabled.value) return
   session.busy = true
@@ -47,8 +62,7 @@ async function selectFile(event: Event) {
   input.value = ''
 }
 async function restore() {
-  if (!session.user || !session.loaded || !candidate.value || disabled.value)
-    return
+  if (!session.user || !session.loaded || !candidate.value || disabled.value) return
   if (
     !(await ask(
       `現在の全記録を、資格${candidate.value.qualifications.length}件・受験履歴${candidate.value.examAttempts.length}件のバックアップへ置き換えます。既存記録は削除されます。必要なら先にJSONを書き出してください。`,
@@ -61,10 +75,10 @@ async function restore() {
   const uid = session.user.uid
   const expected = plain(session.loaded.head)
   const targetDatasetId = crypto.randomUUID()
-  let persisted = false
+  let reserved = false
   try {
-    beginRestore(uid, expected, targetDatasetId)
-    persisted = true
+    await reserveRestore(uid, expected, targetDatasetId)
+    reserved = true
     await new Repository(uid).replaceBackup(
       expected,
       candidate.value,
@@ -73,12 +87,13 @@ async function restore() {
       },
       targetDatasetId,
     )
-    finishRestore(uid)
+    finishRestore(uid, targetDatasetId)
     session.message = '復元の切り替えが完了しました。'
     candidate.value = null
   } catch (err) {
     session.error = errorMessage(err)
-    if (persisted && !session.error.includes('切り替え結果を確認できません')) finishRestore(uid)
+    if (reserved && !session.error.includes('切り替え結果を確認できません'))
+      finishRestore(uid, targetDatasetId)
   } finally {
     session.busy = false
     progress.value = ''
@@ -96,12 +111,13 @@ async function confirmRestore() {
       operation.expected,
       operation.targetDatasetId,
     )
-    finishRestore(operation.uid)
-    session.message = status === 'switched'
-      ? 'サーバーで復元の切り替えを確認しました。'
-      : status === 'not-switched'
-        ? 'サーバーでは切り替わっていません。既存記録は維持されています。ファイルを選び直して復元できます。'
-        : '別の操作で保存領域が変わっています。現在の記録を読み込み直しました。'
+    finishRestore(operation.uid, operation.targetDatasetId)
+    session.message =
+      status === 'switched'
+        ? 'サーバーで復元の切り替えを確認しました。'
+        : status === 'not-switched'
+          ? 'サーバーでは切り替わっていません。既存記録は維持されています。ファイルを選び直して復元できます。'
+          : '別の操作で保存領域が変わっています。現在の記録を読み込み直しました。'
   } catch (error) {
     session.error = `サーバーで確認できませんでした。再実行は保留中です。${errorMessage(error)}`
   } finally {
@@ -121,6 +137,9 @@ async function toggleDevice() {
     if (rememberDevice) await logout()
     else location.reload()
   }
+}
+async function retryRestoreStateRead() {
+  if (session.user && restoreStatus(session.user.uid).kind === 'clear') await refresh()
 }
 </script>
 <template>
@@ -177,6 +196,10 @@ async function toggleDevice() {
         <p v-if="pending" class="notice error" role="status">
           復元の切り替え結果が未確認です。二重復元と記録の変更を止めています。オンラインでサーバー状態を確認してください。
           <button :disabled="session.busy" @click="confirmRestore">サーバー状態を確認</button>
+        </p>
+        <p v-if="restoreUnavailable" class="notice error" role="alert">
+          端末の復元状態を読み取れないか、保存内容が壊れています。通常変更と復元を停止しています。ブラウザーの保存領域を利用可能にして再確認してください。
+          <button :disabled="session.busy" @click="retryRestoreStateRead">端末状態を再確認</button>
         </p>
       </section>
     </div>
