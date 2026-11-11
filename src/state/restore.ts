@@ -11,6 +11,7 @@ export type RestoreState =
   { kind: 'clear' } | { kind: 'pending'; operation: PendingRestore } | { kind: 'unavailable' }
 
 const key = (uid: string) => `qr:restore-pending:${uid}`
+const mutationLock = (uid: string) => `qr:mutation:${uid}`
 export const restoreState = reactive({
   pending: null as PendingRestore | null,
   unavailableUid: null as string | null,
@@ -55,9 +56,22 @@ export function restoreStatus(uid: string): RestoreState {
   }
 }
 
-export async function reserveRestore(uid: string, expected: Head, targetDatasetId: string) {
-  if (!navigator.locks) throw new Error('このブラウザーでは復元操作を安全に開始できません。')
-  return navigator.locks.request(key(uid), { mode: 'exclusive' }, () => {
+export async function withMutationLock<T>(
+  uid: string,
+  operation: () => T | Promise<T>,
+): Promise<T> {
+  if (!navigator.locks) throw new Error('このブラウザーでは変更操作を安全に開始できません。')
+  return navigator.locks.request(mutationLock(uid), { mode: 'exclusive' }, operation)
+}
+
+export async function reserveRestore(
+  uid: string,
+  expected: Head,
+  targetDatasetId: string,
+  validate?: () => void,
+) {
+  return withMutationLock(uid, () => {
+    validate?.()
     const current = restoreStatus(uid)
     if (current.kind === 'unavailable')
       throw new Error('端末の復元状態を確認できません。通常変更と復元を停止しています。')
@@ -76,20 +90,30 @@ export async function reserveRestore(uid: string, expected: Head, targetDatasetI
   })
 }
 
-export function finishRestore(uid: string, targetDatasetId: string) {
-  const current = restoreStatus(uid)
-  if (current.kind !== 'pending' || current.operation.targetDatasetId !== targetDatasetId)
-    return false
+export async function finishRestore(uid: string, targetDatasetId: string): Promise<boolean> {
   try {
-    localStorage.removeItem(key(uid))
+    return await withMutationLock(uid, () => {
+      const current = restoreStatus(uid)
+      if (current.kind !== 'pending' || current.operation.targetDatasetId !== targetDatasetId)
+        return false
+      try {
+        localStorage.removeItem(key(uid))
+      } catch {
+        restoreState.unavailableUid = uid
+        return false
+      }
+      if (
+        restoreState.pending?.uid === uid &&
+        restoreState.pending.targetDatasetId === targetDatasetId
+      )
+        restoreState.pending = null
+      restoreState.unavailableUid = null
+      return true
+    })
   } catch {
     restoreState.unavailableUid = uid
     return false
   }
-  if (restoreState.pending?.uid === uid && restoreState.pending.targetDatasetId === targetDatasetId)
-    restoreState.pending = null
-  restoreState.unavailableUid = null
-  return true
 }
 
 export function syncRestoreStorageEvent(event: Pick<StorageEvent, 'key' | 'newValue'>) {

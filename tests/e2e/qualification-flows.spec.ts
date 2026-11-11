@@ -188,10 +188,12 @@ test('主要フロー: 取り消し後の訂正年月と自己削除・別画面
   await expect(filterDialog.getByLabel('資格名を検索')).toBeInViewport()
   await expect(filterDialog.getByLabel('ジャンルを検索')).toBeInViewport()
   await expect(filterDialog.locator('.selected-tag-list')).toBeInViewport()
-  const selectedListOverflow = await filterDialog.locator('.selected-tag-list').evaluate((list) => ({
-    scroll: list.scrollHeight,
-    client: list.clientHeight,
-  }))
+  const selectedListOverflow = await filterDialog
+    .locator('.selected-tag-list')
+    .evaluate((list) => ({
+      scroll: list.scrollHeight,
+      client: list.clientHeight,
+    }))
   expect(selectedListOverflow.scroll).toBeGreaterThan(selectedListOverflow.client)
   await expect(filterDialog.locator('.dialog-tag-options')).toBeInViewport()
   const denseCandidateBounds = await filterDialog
@@ -211,12 +213,16 @@ test('主要フロー: 取り消し後の訂正年月と自己削除・別画面
   await expect(filterDialog.locator('.selected-tags')).toBeInViewport()
   await expect(filterDialog.getByLabel('ジャンルを検索')).toBeInViewport()
   await page.setViewportSize({ width: 719, height: 607 })
-  const overflow = await page.locator('.dialog-tag-options, .selected-tag-list').evaluateAll((lists) =>
-    lists.map((list) => ({ scroll: list.scrollHeight, client: list.clientHeight })),
-  )
+  const overflow = await page
+    .locator('.dialog-tag-options, .selected-tag-list')
+    .evaluateAll((lists) =>
+      lists.map((list) => ({ scroll: list.scrollHeight, client: list.clientHeight })),
+    )
   expect(overflow.every(({ scroll, client }) => scroll > client)).toBeTruthy()
   await page.evaluate(() => {
-    document.querySelectorAll('.dialog-tag-options button:empty').forEach((button) => button.remove())
+    document
+      .querySelectorAll('.dialog-tag-options button:empty')
+      .forEach((button) => button.remove())
     document
       .querySelectorAll('.selected-tag-list > span:not(.selected-tag)')
       .forEach((tag) => tag.remove())
@@ -252,7 +258,10 @@ test('主要フロー: 取り消し後の訂正年月と自己削除・別画面
     await expect(startWizard).toHaveCount(0)
   }
   await nav.locator('a[href="/qualifications"]').last().click()
-  await expect(nav.getByRole('link', { name: 'あなたの資格' })).toHaveAttribute('aria-current', 'page')
+  await expect(nav.getByRole('link', { name: 'あなたの資格' })).toHaveAttribute(
+    'aria-current',
+    'page',
+  )
   await expect(page.locator('footer')).toHaveCount(0)
   await page.setViewportSize({ width: 719, height: 611 })
   const narrowLayout = await page.evaluate(() => ({
@@ -375,4 +384,30 @@ test('主要フロー: 取り消し後の訂正年月と自己削除・別画面
   await page.evaluate(() => document.dispatchEvent(new Event('visibilitychange')))
   await expect(page.getByRole('dialog')).toHaveCount(0)
   await secondContext.close()
+
+  const settingsTab = await page.context().newPage()
+  await settingsTab.goto('/settings')
+  await expect(settingsTab.getByRole('button', { name: 'バックアップを書き出す' })).toBeEnabled()
+  const backupDownload = settingsTab.waitForEvent('download')
+  await settingsTab.getByRole('button', { name: 'バックアップを書き出す' }).click()
+  const download = await backupDownload
+  await settingsTab.locator('input[type="file"]').setInputFiles((await download.path())!)
+  await settingsTab.getByRole('button', { name: '内容を確認して全置換' }).click()
+  const restoreConsent = settingsTab.getByRole('dialog', { name: '変更内容の確認' })
+  await expect(restoreConsent).toBeVisible()
+
+  const concurrentTab = await page.context().newPage()
+  await concurrentTab.goto('/qualifications')
+  await expect(concurrentTab.getByRole('heading', { name: 'あなたの資格' })).toBeVisible()
+  await registerQualification(concurrentTab, '復元同意中の別タブ変更', '2021-01')
+  await settingsTab.bringToFront()
+  await restoreConsent.getByRole('button', { name: '同意して続ける' }).click()
+  await expect(settingsTab.getByRole('alert')).toContainText(
+    /保存状態が変わりました|現在の状態では復元を開始できません/,
+  )
+  await expect(settingsTab.getByText(/復元の切り替え結果が未確認です/)).toHaveCount(0)
+  await concurrentTab.reload()
+  await expect(concurrentTab.getByRole('button', { name: /復元同意中の別タブ変更/ })).toBeVisible()
+  await concurrentTab.close()
+  await settingsTab.close()
 })
