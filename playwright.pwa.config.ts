@@ -21,7 +21,7 @@ export default defineConfig({
       timeout: 60_000,
     },
     {
-      command: `vite build --mode pwa-e2e && vite preview --host 127.0.0.1 --port ${appPort} --strictPort`,
+      command: `npm run build:pwa-e2e && vite preview --outDir dist-pwa-e2e --host 127.0.0.1 --port ${appPort} --strictPort`,
       url: `http://127.0.0.1:${appPort}`,
       reuseExistingServer: false,
       timeout: 60_000,

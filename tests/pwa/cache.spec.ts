@@ -112,9 +112,47 @@ test('after a real logout and cache deletion, another account cannot see the pre
   await signIn(page, first)
   const name = `Previous account record ${Date.now()}`
   await registerQualification(page, name)
+  const cacheContainsRecord = async () =>
+    page.evaluate(async (qualificationName) => {
+      const factory = indexedDB as IDBFactory & {
+        databases: () => Promise<{ name?: string }[]>
+      }
+      const infos = await factory.databases()
+      const info = infos.find((database) => database.name?.startsWith('firestore/'))
+      if (!info?.name) return false
+      const opened = await new Promise<IDBDatabase>((resolve, reject) => {
+        const request = factory.open(info.name!)
+        request.onsuccess = () => resolve(request.result)
+        request.onerror = () => reject(request.error)
+      })
+      const transaction = opened.transaction([...opened.objectStoreNames], 'readonly')
+      const storeValues = await Promise.all(
+        [...opened.objectStoreNames].map(
+          (storeName) =>
+            new Promise<unknown[]>((resolve, reject) => {
+              const request = transaction.objectStore(storeName).getAll()
+              request.onsuccess = () => resolve(request.result)
+              request.onerror = () => reject(request.error)
+            }),
+        ),
+      )
+      opened.close()
+      return storeValues.some((values) => JSON.stringify(values).includes(qualificationName))
+    }, name)
+  const firestoreDatabaseCount = async () =>
+    page.evaluate(async () => {
+      const factory = indexedDB as IDBFactory & {
+        databases: () => Promise<{ name?: string }[]>
+      }
+      return (await factory.databases()).filter((database) =>
+        database.name?.startsWith('firestore/'),
+      ).length
+    })
+  await expect.poll(cacheContainsRecord, { timeout: 10_000 }).toBe(true)
   await page.getByRole('button', { name: 'アカウント' }).click()
   await page.getByRole('button', { name: 'ログアウト' }).click()
   await expect(page.getByRole('heading', { name: 'ログイン' })).toBeVisible()
+  await expect.poll(firestoreDatabaseCount, { timeout: 10_000 }).toBe(0)
   await signIn(page, second)
   await expect(page.getByText(name)).toHaveCount(0)
   await expect(page.getByRole('button', { name: '記録を再取得', exact: true })).toBeEnabled()
