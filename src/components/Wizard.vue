@@ -147,7 +147,7 @@ async function save() {
           <fieldset>
             <legend>ジャンル（任意・複数選択可）</legend>
             <div class="tag-options">
-              <label v-for="tag in TAGS" :key="tag.id" class="check"
+              <label v-for="tag in TAGS.filter((tag) => tag.selectable)" :key="tag.id" class="check"
                 ><input v-model="draft.fixedTagIds" type="checkbox" :value="tag.id" />{{
                   tag.label
                 }}</label
