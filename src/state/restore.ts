@@ -8,15 +8,25 @@ export interface PendingRestore {
 }
 
 export type RestoreState =
-  { kind: 'clear' } | { kind: 'pending'; operation: PendingRestore } | { kind: 'unavailable' }
+  | { kind: 'clear' }
+  | { kind: 'pending'; operation: PendingRestore }
+  | { kind: 'unavailable'; reason: 'read' | 'corrupt' | 'write' }
 
 const key = (uid: string) => `qr:restore-pending:${uid}`
 const mutationLock = (uid: string) => `qr:mutation:${uid}`
+const probeKey = (uid: string) => `qr:restore-probe:${uid}`
+const probeValue = 'qualification-records:restore-probe:v1'
 export const restoreState = reactive({
   pending: null as PendingRestore | null,
   unavailableUid: null as string | null,
+  unavailableByUid: {} as Record<string, 'read' | 'corrupt' | 'write'>,
 })
 let observedUid: string | null = null
+
+function markUnavailable(uid: string, reason: 'read' | 'corrupt' | 'write') {
+  restoreState.unavailableByUid[uid] = reason
+  restoreState.unavailableUid = uid
+}
 
 function parse(uid: string, value: string): PendingRestore {
   const pending = JSON.parse(value) as PendingRestore
@@ -35,24 +45,85 @@ function parse(uid: string, value: string): PendingRestore {
 
 export function restoreStatus(uid: string): RestoreState {
   observedUid = uid
+  const unavailable = restoreState.unavailableByUid[uid]
+  if (unavailable) return { kind: 'unavailable', reason: unavailable }
+  let value: string | null
   try {
-    const value = localStorage.getItem(key(uid))
-    if (value === null) {
-      if (restoreState.pending?.uid === uid) {
-        restoreState.unavailableUid = uid
-        return { kind: 'unavailable' }
-      }
-      restoreState.pending = null
-      restoreState.unavailableUid = null
-      return { kind: 'clear' }
+    value = localStorage.getItem(key(uid))
+  } catch {
+    markUnavailable(uid, 'read')
+    return { kind: 'unavailable', reason: 'read' }
+  }
+  if (value === null) {
+    if (restoreState.pending?.uid === uid) {
+      markUnavailable(uid, 'corrupt')
+      return { kind: 'unavailable', reason: 'corrupt' }
     }
+    restoreState.pending = null
+    if (restoreState.unavailableUid === uid) restoreState.unavailableUid = null
+    return { kind: 'clear' }
+  }
+  try {
     const pending = parse(uid, value)
     restoreState.pending = pending
-    restoreState.unavailableUid = null
     return { kind: 'pending', operation: pending }
   } catch {
-    restoreState.unavailableUid = uid
-    return { kind: 'unavailable' }
+    markUnavailable(uid, 'corrupt')
+    return { kind: 'unavailable', reason: 'corrupt' }
+  }
+}
+
+/** Explicitly rechecks storage and, after a write failure, verifies a separate probe key. */
+export async function recheckRestoreState(uid: string): Promise<RestoreState> {
+  try {
+    return await withMutationLock(uid, () => {
+      let value: string | null
+      try {
+        value = localStorage.getItem(key(uid))
+      } catch {
+        markUnavailable(uid, 'read')
+        return { kind: 'unavailable', reason: 'read' }
+      }
+
+      let pending: PendingRestore | null = null
+      if (value !== null) {
+        try {
+          pending = parse(uid, value)
+        } catch {
+          markUnavailable(uid, 'corrupt')
+          return { kind: 'unavailable', reason: 'corrupt' }
+        }
+      } else if (restoreState.pending?.uid === uid) {
+        markUnavailable(uid, 'read')
+        return { kind: 'unavailable', reason: 'read' }
+      }
+
+      if (restoreState.unavailableByUid[uid] === 'write') {
+        const probe = probeKey(uid)
+        try {
+          const existing = localStorage.getItem(probe)
+          if (existing === null) localStorage.setItem(probe, probeValue)
+          else if (existing !== probeValue) {
+            markUnavailable(uid, 'write')
+            return { kind: 'unavailable', reason: 'write' }
+          }
+          if (localStorage.getItem(probe) !== probeValue) throw new Error('probe write failed')
+          localStorage.removeItem(probe)
+          if (localStorage.getItem(probe) !== null) throw new Error('probe removal failed')
+        } catch {
+          markUnavailable(uid, 'write')
+          return { kind: 'unavailable', reason: 'write' }
+        }
+      }
+
+      delete restoreState.unavailableByUid[uid]
+      if (restoreState.unavailableUid === uid) restoreState.unavailableUid = null
+      restoreState.pending = pending
+      return pending ? { kind: 'pending', operation: pending } : { kind: 'clear' }
+    })
+  } catch {
+    markUnavailable(uid, 'read')
+    return { kind: 'unavailable', reason: 'read' }
   }
 }
 
@@ -81,11 +152,10 @@ export async function reserveRestore(
     try {
       localStorage.setItem(key(uid), JSON.stringify(pending))
     } catch {
-      restoreState.unavailableUid = uid
+      markUnavailable(uid, 'write')
       throw new Error('端末に復元状態を保存できません。復元を開始していません。')
     }
     restoreState.pending = pending
-    restoreState.unavailableUid = null
     return pending
   })
 }
@@ -99,7 +169,7 @@ export async function finishRestore(uid: string, targetDatasetId: string): Promi
       try {
         localStorage.removeItem(key(uid))
       } catch {
-        restoreState.unavailableUid = uid
+        markUnavailable(uid, 'write')
         return false
       }
       if (
@@ -107,11 +177,10 @@ export async function finishRestore(uid: string, targetDatasetId: string): Promi
         restoreState.pending.targetDatasetId === targetDatasetId
       )
         restoreState.pending = null
-      restoreState.unavailableUid = null
       return true
     })
   } catch {
-    restoreState.unavailableUid = uid
+    markUnavailable(uid, 'write')
     return false
   }
 }
@@ -119,20 +188,18 @@ export async function finishRestore(uid: string, targetDatasetId: string): Promi
 export function syncRestoreStorageEvent(event: Pick<StorageEvent, 'key' | 'newValue'>) {
   if (!observedUid) return
   if (event.key === null) {
-    restoreState.unavailableUid = observedUid
+    markUnavailable(observedUid, 'read')
     return
   }
   if (event.key !== key(observedUid)) return
   if (event.newValue === null) {
     restoreState.pending = null
-    restoreState.unavailableUid = null
     return
   }
   try {
     restoreState.pending = parse(observedUid, event.newValue)
-    restoreState.unavailableUid = null
   } catch {
-    restoreState.unavailableUid = observedUid
+    markUnavailable(observedUid, 'corrupt')
   }
 }
 

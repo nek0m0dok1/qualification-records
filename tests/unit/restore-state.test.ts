@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import {
   finishRestore,
   reserveRestore,
+  recheckRestoreState,
   restoreState,
   restoreStatus,
   syncRestoreStorageEvent,
@@ -58,6 +59,7 @@ afterEach(() => {
   failRemoves = false
   restoreState.pending = null
   restoreState.unavailableUid = null
+  restoreState.unavailableByUid = {}
   locked = false
   lockQueue.length = 0
   vi.restoreAllMocks()
@@ -78,12 +80,17 @@ describe('restore uncertainty state', () => {
   it('fails closed when storage cannot be read or contains a malformed descriptor', () => {
     values.set(key, JSON.stringify({ uid: 'alice', expected, targetDatasetId: 'target' }))
     failReads = true
-    expect(restoreStatus('alice')).toEqual({ kind: 'unavailable' })
+    expect(restoreStatus('alice')).toEqual({ kind: 'unavailable', reason: 'read' })
     failReads = false
+    expect(restoreStatus('alice')).toEqual({ kind: 'unavailable', reason: 'read' })
+    restoreState.unavailableByUid = {}
+    restoreState.unavailableUid = null
     values.set(key, '{broken')
-    expect(restoreStatus('alice')).toEqual({ kind: 'unavailable' })
+    expect(restoreStatus('alice')).toEqual({ kind: 'unavailable', reason: 'corrupt' })
+    restoreState.unavailableByUid = {}
+    restoreState.unavailableUid = null
     values.set(key, '')
-    expect(restoreStatus('alice')).toEqual({ kind: 'unavailable' })
+    expect(restoreStatus('alice')).toEqual({ kind: 'unavailable', reason: 'corrupt' })
   })
 
   it('does not start when durable state cannot be saved', async () => {
@@ -91,6 +98,37 @@ describe('restore uncertainty state', () => {
     await expect(reserveRestore('alice', expected, 'target')).rejects.toThrow('保存できません')
     expect(values.has(key)).toBe(false)
     expect(restoreState.unavailableUid).toBe('alice')
+    expect(restoreStatus('alice')).toEqual({ kind: 'unavailable', reason: 'write' })
+    expect(restoreStatus('alice')).toEqual({ kind: 'unavailable', reason: 'write' })
+    failWrites = false
+    expect(await recheckRestoreState('alice')).toEqual({ kind: 'clear' })
+    expect(restoreStatus('alice')).toEqual({ kind: 'clear' })
+  })
+
+  it('does not clear a write failure or alter an existing pending record during explicit recovery', async () => {
+    const descriptor = { uid: 'alice', expected, targetDatasetId: 'existing-target' }
+    values.set(key, JSON.stringify(descriptor))
+    failWrites = true
+    restoreState.unavailableByUid.alice = 'write'
+    expect(restoreStatus('alice')).toEqual({ kind: 'unavailable', reason: 'write' })
+    expect(await recheckRestoreState('alice')).toEqual({ kind: 'unavailable', reason: 'write' })
+    expect(values.get(key)).toBe(JSON.stringify(descriptor))
+    failWrites = false
+    expect(await recheckRestoreState('alice')).toEqual({ kind: 'pending', operation: descriptor })
+    expect(values.get(key)).toBe(JSON.stringify(descriptor))
+  })
+
+  it('keeps read and corrupt failures latched until explicit recheck', async () => {
+    failReads = true
+    expect(restoreStatus('alice')).toEqual({ kind: 'unavailable', reason: 'read' })
+    failReads = false
+    expect(restoreStatus('alice')).toEqual({ kind: 'unavailable', reason: 'read' })
+    expect(await recheckRestoreState('alice')).toEqual({ kind: 'clear' })
+    values.set(key, '{broken')
+    expect(restoreStatus('alice')).toEqual({ kind: 'unavailable', reason: 'corrupt' })
+    values.delete(key)
+    expect(restoreStatus('alice')).toEqual({ kind: 'unavailable', reason: 'corrupt' })
+    expect(await recheckRestoreState('alice')).toEqual({ kind: 'clear' })
   })
 
   it('serializes same-UID starts across tabs and refuses the second operation', async () => {
@@ -123,7 +161,13 @@ describe('restore uncertainty state', () => {
     await reserveRestore('alice', expected, 'target')
     failRemoves = true
     expect(await finishRestore('alice', 'target')).toBe(false)
-    expect(restoreStatus('alice').kind).toBe('pending')
+    expect(restoreStatus('alice')).toEqual({ kind: 'unavailable', reason: 'write' })
+    expect(await recheckRestoreState('alice')).toEqual({ kind: 'unavailable', reason: 'write' })
+    failRemoves = false
+    expect(await recheckRestoreState('alice')).toEqual({
+      kind: 'pending',
+      operation: { uid: 'alice', expected, targetDatasetId: 'target' },
+    })
   })
 
   it('serializes two stale finishes around a newer reservation', async () => {

@@ -5,7 +5,13 @@ import { ask } from '../state/ui'
 import { rememberDevice, storageSet } from '../services/firebase'
 import { makeBackup, parseBackup, type Backup } from '../domain/backup'
 import { Repository } from '../services/repository'
-import { finishRestore, reserveRestore, restoreState, restoreStatus } from '../state/restore'
+import {
+  finishRestore,
+  recheckRestoreState,
+  reserveRestore,
+  restoreState,
+  restoreStatus,
+} from '../state/restore'
 const candidate = ref<Backup | null>(null),
   progress = ref('')
 const restoreStateForUser = computed(() => {
@@ -116,6 +122,7 @@ async function restore() {
   session.message = ''
   const targetDatasetId = crypto.randomUUID()
   let reserved = false
+  let ownsBusy = false
   try {
     await reserveRestore(uid, expected, targetDatasetId, () => {
       const issue = restoreStartIssue(uid, expected, backup)
@@ -125,6 +132,7 @@ async function restore() {
     const executionIssue = restoreStartIssue(uid, expected, backup, targetDatasetId)
     if (executionIssue) throw new Error(executionIssue)
     session.busy = true
+    ownsBusy = true
     await new Repository(uid).replaceBackup(
       expected,
       backup,
@@ -146,7 +154,7 @@ async function restore() {
       if (!(await finishRestore(uid, targetDatasetId)))
         session.error += ' 復元保留を解除できないため、状態確認まで操作を停止しています。'
   } finally {
-    session.busy = false
+    if (ownsBusy) session.busy = false
     progress.value = ''
   }
   if (!pending.value) await refresh()
@@ -194,7 +202,9 @@ async function toggleDevice() {
   }
 }
 async function retryRestoreStateRead() {
-  if (session.user && restoreStatus(session.user.uid).kind === 'clear') await refresh()
+  if (!session.user) return
+  const state = await recheckRestoreState(session.user.uid)
+  if (state.kind === 'clear') await refresh()
 }
 </script>
 <template>

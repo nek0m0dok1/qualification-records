@@ -504,6 +504,26 @@ test('同意待機中にUIDが変わっても旧バックアップを別UIDへ�
   const consent = settingsTab.getByRole('dialog', { name: '変更内容の確認' })
   await expect(consent).toBeVisible()
 
+  await settingsTab.evaluate((uid) => {
+    const lockWindow = window as typeof window & {
+      restoreLockReady?: boolean
+      releaseRestoreLock?: () => void
+    }
+    lockWindow.restoreLockReady = false
+    void navigator.locks.request(`qr:mutation:${uid}`, async () => {
+      lockWindow.restoreLockReady = true
+      await new Promise<void>((resolve) => (lockWindow.releaseRestoreLock = resolve))
+    })
+  }, firstAccount.uid)
+  await expect
+    .poll(() =>
+      settingsTab.evaluate(
+        () => (window as typeof window & { restoreLockReady?: boolean }).restoreLockReady,
+      ),
+    )
+    .toBe(true)
+  await consent.getByRole('button', { name: '同意して続ける' }).click()
+
   const switchingTab = await page.context().newPage()
   await switchingTab.goto('/qualifications')
   await expect(switchingTab.getByRole('button', { name: /UID変更前の所有者資格/ })).toBeVisible()
@@ -515,12 +535,34 @@ test('同意待機中にUIDが変わっても旧バックアップを別UIDへ�
   await switchingTab.getByRole('button', { name: 'ログイン' }).click()
   await expect(switchingTab.getByRole('heading', { name: 'あなたの資格' })).toBeVisible()
   await expect(settingsTab.getByRole('button', { name: new RegExp(secondEmail) })).toBeVisible()
-  await expect(consent).toBeVisible()
 
-  await consent.getByRole('button', { name: '同意して続ける' }).click()
+  let releaseBobSave!: () => void
+  let signalBobSave!: () => void
+  const bobSaveRequested = new Promise<void>((resolve) => (signalBobSave = resolve))
+  const bobSaveGate = new Promise<void>((resolve) => (releaseBobSave = resolve))
+  let bobWriteHeld = false
+  await switchingTab.route('**/*', async (route) => {
+    const request = route.request()
+    if (!bobWriteHeld && request.url().includes(':8080') && request.method() === 'POST') {
+      bobWriteHeld = true
+      signalBobSave()
+      await bobSaveGate
+    }
+    await route.continue()
+  })
+  const bobSave = registerQualification(switchingTab, 'UID切替後に保留中の通常保存', '2023-03')
+  await bobSaveRequested
+
+  await settingsTab.evaluate(() =>
+    (window as typeof window & { releaseRestoreLock?: () => void }).releaseRestoreLock?.(),
+  )
   await expect(settingsTab.getByRole('alert')).toHaveText(
     'ログイン状態が変わりました。内容を再確認してください。',
   )
+  await expect(settingsTab.getByRole('button', { name: 'バックアップを書き出す' })).toBeDisabled()
+  releaseBobSave()
+  await bobSave
+  await expect(settingsTab.getByRole('button', { name: 'バックアップを書き出す' })).toBeEnabled()
   await expect(settingsTab.getByRole('button', { name: '記録を再取得' })).toBeEnabled()
   await expect(settingsTab.getByRole('button', { name: '＋ 記録を追加' })).toBeEnabled()
   await expect(settingsTab.getByText(/復元の切り替え結果が未確認です/)).toHaveCount(0)
@@ -558,14 +600,112 @@ test('同意待機中にUIDが変わっても旧バックアップを別UIDへ�
   expect(secondRootResponse.ok(), await secondRootResponse.text()).toBeTruthy()
   const secondRoot = await secondRootResponse.json()
   const secondDatasetId = secondRoot.fields.activeDatasetId.stringValue as string
+  let bobQualificationId = ''
   for (const kind of ['qualifications', 'acquisitions', 'examAttempts']) {
     const response = await request.get(
       `${firestoreDocument(secondAccount.uid)}/datasets/${secondDatasetId}/${kind}`,
       { headers: { Authorization: `Bearer ${secondAccount.idToken}` } },
     )
     expect(response.ok(), await response.text()).toBeTruthy()
-    expect((await response.json()).documents ?? []).toEqual([])
+    const documents = (await response.json()).documents ?? []
+    if (kind === 'qualifications') {
+      expect(
+        documents.map(
+          (document: { fields: { name: { stringValue: string } } }) =>
+            document.fields.name.stringValue,
+        ),
+      ).toEqual(['UID切替後に保留中の通常保存'])
+      bobQualificationId = documents[0].name.split('/').at(-1) as string
+    } else if (kind === 'acquisitions')
+      expect(
+        documents.map(
+          (document: {
+            fields: {
+              qualificationId: { stringValue: string }
+              acquiredMonth: { stringValue: string }
+            }
+          }) => [
+            document.fields.qualificationId.stringValue,
+            document.fields.acquiredMonth.stringValue,
+          ],
+        ),
+      ).toEqual([[bobQualificationId, '2023-03']])
+    else expect(documents).toEqual([])
   }
   await switchingTab.close()
+  await settingsTab.close()
+})
+
+test('復元のロック待機中に開始した同一UIDの書き出しbusyを復元中止が解除しない', async ({
+  page,
+  request,
+}) => {
+  test.setTimeout(90_000)
+  await waitForAuthEmulator(request)
+  const email = `restore-busy-owner-${Date.now()}@example.test`
+  const password = 'e2e-password-123'
+  const account = await createVerifiedAccount(request, email, password)
+  await page.goto('/login')
+  await page.getByLabel('メールアドレス').fill(email)
+  await page.getByLabel('パスワード', { exact: true }).fill(password)
+  await page.getByLabel('ログイン状態を記憶する').check()
+  await page.getByRole('button', { name: 'ログイン' }).click()
+  await expect(page.getByRole('heading', { name: 'あなたの資格' })).toBeVisible()
+
+  const settingsTab = await page.context().newPage()
+  await settingsTab.goto('/settings')
+  const downloadPromise = settingsTab.waitForEvent('download')
+  await settingsTab.getByRole('button', { name: 'バックアップを書き出す' }).click()
+  const download = await downloadPromise
+  await settingsTab.locator('input[type="file"]').setInputFiles((await download.path())!)
+  await settingsTab.getByRole('button', { name: '内容を確認して全置換' }).click()
+  const consent = settingsTab.getByRole('dialog', { name: '変更内容の確認' })
+  await expect(consent).toBeVisible()
+  await settingsTab.evaluate((uid) => {
+    const lockWindow = window as typeof window & {
+      restoreLockReady?: boolean
+      releaseRestoreLock?: () => void
+    }
+    lockWindow.restoreLockReady = false
+    void navigator.locks.request(`qr:mutation:${uid}`, async () => {
+      lockWindow.restoreLockReady = true
+      await new Promise<void>((resolve) => (lockWindow.releaseRestoreLock = resolve))
+    })
+  }, account.uid)
+  await expect
+    .poll(() =>
+      settingsTab.evaluate(
+        () => (window as typeof window & { restoreLockReady?: boolean }).restoreLockReady,
+      ),
+    )
+    .toBe(true)
+  await consent.getByRole('button', { name: '同意して続ける' }).click()
+
+  let releaseExport!: () => void
+  let signalExport!: () => void
+  const exportRequested = new Promise<void>((resolve) => (signalExport = resolve))
+  const exportGate = new Promise<void>((resolve) => (releaseExport = resolve))
+  let exportHeld = false
+  await settingsTab.route('**/*', async (route) => {
+    const request = route.request()
+    if (!exportHeld && request.url().includes(':8080') && request.method() === 'POST') {
+      exportHeld = true
+      signalExport()
+      await exportGate
+    }
+    await route.continue()
+  })
+  const exportDownload = settingsTab.waitForEvent('download')
+  await settingsTab.getByRole('button', { name: 'バックアップを書き出す' }).click()
+  await exportRequested
+  await expect(settingsTab.getByRole('button', { name: 'バックアップを書き出す' })).toBeDisabled()
+  await settingsTab.evaluate(() =>
+    (window as typeof window & { releaseRestoreLock?: () => void }).releaseRestoreLock?.(),
+  )
+  await expect(settingsTab.getByRole('alert')).toContainText('現在の状態では復元を開始できません')
+  await expect(settingsTab.getByRole('button', { name: 'バックアップを書き出す' })).toBeDisabled()
+  releaseExport()
+  await exportDownload
+  await expect(settingsTab.getByRole('button', { name: 'バックアップを書き出す' })).toBeEnabled()
   await settingsTab.close()
 })
