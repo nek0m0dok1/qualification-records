@@ -9,8 +9,12 @@ const injected = vi.hoisted(() => ({
   failNextServerRead: false,
   failNextServerList: false,
   transactionCount: 0,
+  transactionAttempts: 0,
   failAfterTransactionAt: null as number | null,
+  failBeforeTransactionAt: null as number | null,
   beforeNextTransaction: null as (() => Promise<void>) | null,
+  pauseNextTransaction: null as Promise<void> | null,
+  onTransactionPaused: null as (() => void) | null,
 }))
 
 vi.mock('firebase/firestore', async (importOriginal) => {
@@ -18,13 +22,26 @@ vi.mock('firebase/firestore', async (importOriginal) => {
   return {
     ...actual,
     runTransaction: async (...args: Parameters<typeof actual.runTransaction>) => {
+      if (injected.pauseNextTransaction) {
+        const gate = injected.pauseNextTransaction
+        injected.pauseNextTransaction = null
+        const signal = injected.onTransactionPaused
+        injected.onTransactionPaused = null
+        signal?.()
+        await gate
+      }
       if (injected.beforeNextTransaction) {
         const before = injected.beforeNextTransaction
         injected.beforeNextTransaction = null
         await before()
       }
+      injected.transactionAttempts += 1
       if (injected.failBeforeTransaction) {
         injected.failBeforeTransaction = false
+        throw new Error('injected transaction failure before commit')
+      }
+      if (injected.transactionAttempts === injected.failBeforeTransactionAt) {
+        injected.failBeforeTransactionAt = null
         throw new Error('injected transaction failure before commit')
       }
       const result = await actual.runTransaction(...args)
@@ -83,8 +100,12 @@ beforeEach(async () => {
   injected.failNextServerRead = false
   injected.failNextServerList = false
   injected.transactionCount = 0
+  injected.transactionAttempts = 0
   injected.failAfterTransactionAt = null
+  injected.failBeforeTransactionAt = null
   injected.beforeNextTransaction = null
+  injected.pauseNextTransaction = null
+  injected.onTransactionPaused = null
   await env.clearFirestore()
 })
 
@@ -179,6 +200,144 @@ describe('JSON backup restore safety on Firestore Emulator', () => {
       acquisitions: [],
       examAttempts: [],
     })
+  })
+
+  it('reports switched and conflict from the persisted revision fence', async () => {
+    const repo = repository()
+    await repo.initialize()
+    const before = await repo.load()
+    const targetId = 'confirmed-switch-target'
+    const restored = records('confirmed-switch', 3)
+
+    await repo.replaceBackup(before.head, makeBackup(restored), () => {}, targetId)
+
+    expect(await repo.confirmReplace(before.head, targetId)).toBe('switched')
+    expect(await repo.confirmReplace(before.head, 'different-target')).toBe('conflict')
+    expect(await rawHead()).toEqual({
+      activeDatasetId: targetId,
+      revision: before.head.revision + 1,
+    })
+    expect(await rawRecords(targetId)).toEqual(restored)
+  })
+
+  it('fences a not-started restore before cleanup and rejects its delayed prepare', async () => {
+    const repo = repository()
+    await repo.initialize()
+    const initial = await repo.load()
+    const stable = records('fence-stable', 2)
+    await repo.save(initial, stable)
+    const before = await repo.load()
+    const targetId = 'late-prepare-target'
+
+    expect(await repo.confirmReplace(before.head, targetId)).toBe('not-switched')
+    expect(await rawHead()).toEqual({
+      activeDatasetId: before.head.activeDatasetId,
+      revision: before.head.revision + 1,
+    })
+    expect((await rawDataset(targetId))?.status).toBe('retired')
+
+    await repo.cleanup()
+
+    expect(await rawDataset(targetId)).toBeUndefined()
+    expect(await rawRecords(targetId)).toEqual({
+      qualifications: [],
+      acquisitions: [],
+      examAttempts: [],
+    })
+    await expect(
+      repo.replace(before.head, records('late-prepare', 5), () => {}, targetId),
+    ).rejects.toThrow('既存記録が変更されています')
+    expect(await rawHead()).toEqual({
+      activeDatasetId: before.head.activeDatasetId,
+      revision: before.head.revision + 1,
+    })
+    expect(await rawRecords(before.head.activeDatasetId)).toEqual(stable)
+  })
+
+  it('rejects a prepared switch after confirming and cleaning its building target', async () => {
+    const repo = repository()
+    await repo.initialize()
+    const initial = await repo.load()
+    const stable = records('fence-switch-stable', 2)
+    await repo.save(initial, stable)
+    const before = await repo.load()
+    const targetId = 'late-switch-target'
+    const candidate = records('late-switch', 5)
+    let releaseSwitch!: () => void
+    let signalSwitchPaused!: () => void
+    const switchGate = new Promise<void>((resolve) => {
+      releaseSwitch = resolve
+    })
+    const switchPaused = new Promise<void>((resolve) => {
+      signalSwitchPaused = resolve
+    })
+    let progressCalls = 0
+
+    const delayedSwitch = repo.replaceBackup(
+      before.head,
+      makeBackup(candidate),
+      () => {
+        progressCalls += 1
+        if (progressCalls === progressCount(candidate)) {
+          injected.pauseNextTransaction = switchGate
+          injected.onTransactionPaused = signalSwitchPaused
+        }
+      },
+      targetId,
+    )
+    await switchPaused
+
+    expect((await rawDataset(targetId))?.status).toBe('building')
+    expect(await rawRecords(targetId)).toEqual(candidate)
+    expect(await repo.confirmReplace(before.head, targetId)).toBe('not-switched')
+    expect(await rawHead()).toEqual({
+      activeDatasetId: before.head.activeDatasetId,
+      revision: before.head.revision + 1,
+    })
+
+    await repo.cleanup()
+    expect(await rawDataset(targetId)).toBeUndefined()
+    expect(await rawRecords(targetId)).toEqual({
+      qualifications: [],
+      acquisitions: [],
+      examAttempts: [],
+    })
+
+    releaseSwitch()
+    await expect(delayedSwitch).rejects.toThrow()
+    expect(await rawHead()).toEqual({
+      activeDatasetId: before.head.activeDatasetId,
+      revision: before.head.revision + 1,
+    })
+    expect(await rawRecords(before.head.activeDatasetId)).toEqual(stable)
+  })
+
+  it('does not report confirmation success when its finalization transaction fails', async () => {
+    const repo = repository()
+    await repo.initialize()
+    const before = await repo.load()
+    const targetId = 'failed-confirm-target'
+    injected.transactionAttempts = 0
+    injected.failBeforeTransactionAt = 2
+
+    await expect(repo.confirmReplace(before.head, targetId)).rejects.toThrow(
+      'injected transaction failure before commit',
+    )
+
+    expect(await rawHead()).toEqual(before.head)
+    expect((await rawDataset(targetId))?.status).toBe('building')
+    expect(await rawRecords(targetId)).toEqual({
+      qualifications: [],
+      acquisitions: [],
+      examAttempts: [],
+    })
+
+    expect(await repo.confirmReplace(before.head, targetId)).toBe('not-switched')
+    expect(await rawHead()).toEqual({
+      activeDatasetId: before.head.activeDatasetId,
+      revision: before.head.revision + 1,
+    })
+    expect((await rawDataset(targetId))?.status).toBe('retired')
   })
 
   it('rejects invalid data before staging and leaves the active dataset unchanged', async () => {
