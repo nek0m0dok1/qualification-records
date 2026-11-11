@@ -3,7 +3,7 @@ import { onAuthStateChanged, signOut, reload, getIdToken, type User } from 'fire
 import { auth, eraseCache, storageGet, storageSet, storageRemove } from '../services/firebase'
 import { Repository, type Loaded } from '../services/repository'
 import { emptyRecords, type Records } from '../domain/model'
-import { restoreStatus } from './restore'
+import { restoreStatus, withMutationLock } from './restore'
 export const session = reactive({
   user: null as User | null,
   ready: false,
@@ -116,38 +116,49 @@ export function refresh(): Promise<void> {
   return current
 }
 export async function changeRecords(transform: (records: Records) => Records): Promise<boolean> {
-  if (
-    !session.user ||
-    restoreStatus(session.user.uid).kind !== 'clear' ||
-    !session.loaded ||
-    !session.writable ||
-    !navigator.onLine ||
-    session.busy ||
-    session.fetching
-  ) {
+  const uid = session.user?.uid
+  if (!uid) {
     session.error = '今は変更できません。オンラインで更新してください。'
     return false
   }
-  const token = epoch
-  session.busy = true
-  session.error = ''
-  session.message = ''
-  let saved = false
   try {
-    await new Repository(session.user.uid).save(
-      plain(session.loaded),
-      transform(plain(session.records)),
-    )
-    if (token !== epoch) return false
-    session.message = 'サーバーへの保存が完了しました。'
-    saved = true
+    return await withMutationLock(uid, async () => {
+      if (
+        session.user?.uid !== uid ||
+        restoreStatus(uid).kind !== 'clear' ||
+        !session.loaded ||
+        !session.writable ||
+        !navigator.onLine ||
+        session.busy ||
+        session.fetching
+      ) {
+        session.error = '今は変更できません。オンラインで更新してください。'
+        return false
+      }
+      const token = epoch
+      const loaded = plain(session.loaded)
+      const next = transform(plain(session.records))
+      session.busy = true
+      session.error = ''
+      session.message = ''
+      let saved = false
+      try {
+        await new Repository(uid).save(loaded, next)
+        if (token !== epoch) return false
+        session.message = 'サーバーへの保存が完了しました。'
+        saved = true
+      } catch (error) {
+        if (token === epoch) session.error = errorMessage(error)
+      } finally {
+        if (token === epoch) session.busy = false
+      }
+      if (saved) await refresh()
+      return saved
+    })
   } catch (error) {
-    if (token === epoch) session.error = errorMessage(error)
-  } finally {
-    if (token === epoch) session.busy = false
+    session.error = errorMessage(error)
+    return false
   }
-  if (saved) await refresh()
-  return saved
 }
 export async function logout(): Promise<void> {
   if (session.busy) return

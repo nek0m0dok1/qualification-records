@@ -5,6 +5,7 @@ import {
   restoreState,
   restoreStatus,
   syncRestoreStorageEvent,
+  withMutationLock,
 } from '../../src/state/restore'
 
 const values = new Map<string, string>()
@@ -57,6 +58,8 @@ afterEach(() => {
   failRemoves = false
   restoreState.pending = null
   restoreState.unavailableUid = null
+  locked = false
+  lockQueue.length = 0
   vi.restoreAllMocks()
 })
 
@@ -103,7 +106,7 @@ describe('restore uncertainty state', () => {
   it('only removes the operation whose target ID matches', async () => {
     await reserveRestore('alice', expected, 'old-target')
     values.set(key, JSON.stringify({ uid: 'alice', expected, targetDatasetId: 'new-target' }))
-    expect(finishRestore('alice', 'old-target')).toBe(false)
+    expect(await finishRestore('alice', 'old-target')).toBe(false)
     expect(JSON.parse(values.get(key)!).targetDatasetId).toBe('new-target')
   })
 
@@ -113,13 +116,33 @@ describe('restore uncertainty state', () => {
     values.set(key, JSON.stringify(other))
     syncRestoreStorageEvent({ key, newValue: JSON.stringify(other) })
     expect(restoreState.pending).toEqual(other)
-    expect(finishRestore('alice', 'first')).toBe(false)
+    expect(await finishRestore('alice', 'first')).toBe(false)
   })
 
   it('keeps the operation when its durable descriptor cannot be removed', async () => {
     await reserveRestore('alice', expected, 'target')
     failRemoves = true
-    expect(finishRestore('alice', 'target')).toBe(false)
+    expect(await finishRestore('alice', 'target')).toBe(false)
     expect(restoreStatus('alice').kind).toBe('pending')
+  })
+
+  it('serializes two stale finishes around a newer reservation', async () => {
+    await reserveRestore('alice', expected, 'first')
+    let release!: () => void
+    const held = withMutationLock(
+      'alice',
+      () => new Promise<void>((resolve) => (release = resolve)),
+    )
+    await Promise.resolve()
+    const finishOne = finishRestore('alice', 'first')
+    const nextReservation = reserveRestore('alice', expected, 'second')
+    const finishTwo = finishRestore('alice', 'first')
+    release()
+
+    await held
+    expect(await finishOne).toBe(true)
+    await nextReservation
+    expect(await finishTwo).toBe(false)
+    expect(JSON.parse(values.get(key)!).targetDatasetId).toBe('second')
   })
 })

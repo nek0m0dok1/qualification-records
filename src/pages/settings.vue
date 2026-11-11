@@ -25,6 +25,34 @@ const disabled = computed(
     !!pending.value ||
     restoreUnavailable.value,
 )
+function restoreStartIssue(
+  uid: string,
+  expected: { activeDatasetId: string; revision: number },
+  backup: Backup,
+  targetDatasetId?: string,
+) {
+  if (session.user?.uid !== uid) return 'ログイン状態が変わりました。内容を再確認してください。'
+  if (
+    !session.loaded ||
+    session.loaded.head.activeDatasetId !== expected.activeDatasetId ||
+    session.loaded.head.revision !== expected.revision
+  )
+    return '保存状態が変わりました。最新の記録を読み込んでから再確認してください。'
+  if (candidate.value !== backup)
+    return '選択中のバックアップが変わりました。内容を再確認してください。'
+  if (session.busy || session.fetching || !session.writable || !navigator.onLine)
+    return '現在の状態では復元を開始できません。オンラインで更新してください。'
+  const state = restoreStatus(uid)
+  if (targetDatasetId) {
+    if (state.kind !== 'pending' || state.operation.targetDatasetId !== targetDatasetId)
+      return '復元の保留状態が変わりました。サーバー状態を確認してください。'
+  } else if (state.kind !== 'clear') {
+    return state.kind === 'pending'
+      ? '未確認の復元があります。先にサーバー状態を確認してください。'
+      : '端末の復元状態を確認できません。通常変更と復元を停止しています。'
+  }
+  return ''
+}
 async function exportJson() {
   if (!session.user || disabled.value) return
   session.busy = true
@@ -62,43 +90,66 @@ async function selectFile(event: Event) {
   input.value = ''
 }
 async function restore() {
-  if (!session.user || !session.loaded || !candidate.value || disabled.value) return
+  const user = session.user
+  const loaded = session.loaded
+  const backup = candidate.value
+  if (!user || !loaded || !backup || disabled.value) return
+  const uid = user.uid
+  const expected = plain(loaded.head)
+  const initialIssue = restoreStartIssue(uid, expected, backup)
+  if (initialIssue) {
+    session.error = initialIssue
+    return
+  }
   if (
     !(await ask(
-      `現在の全記録を、資格${candidate.value.qualifications.length}件・受験履歴${candidate.value.examAttempts.length}件のバックアップへ置き換えます。既存記録は削除されます。必要なら先にJSONを書き出してください。`,
+      `現在の全記録を、資格${backup.qualifications.length}件・受験履歴${backup.examAttempts.length}件のバックアップへ置き換えます。既存記録は削除されます。必要なら先にJSONを書き出してください。`,
     ))
   )
     return
-  session.busy = true
+  const afterConsentIssue = restoreStartIssue(uid, expected, backup)
+  if (afterConsentIssue) {
+    session.error = afterConsentIssue
+    return
+  }
   session.error = ''
   session.message = ''
-  const uid = session.user.uid
-  const expected = plain(session.loaded.head)
   const targetDatasetId = crypto.randomUUID()
   let reserved = false
   try {
-    await reserveRestore(uid, expected, targetDatasetId)
+    await reserveRestore(uid, expected, targetDatasetId, () => {
+      const issue = restoreStartIssue(uid, expected, backup)
+      if (issue) throw new Error(issue)
+    })
     reserved = true
+    const executionIssue = restoreStartIssue(uid, expected, backup, targetDatasetId)
+    if (executionIssue) throw new Error(executionIssue)
+    session.busy = true
     await new Repository(uid).replaceBackup(
       expected,
-      candidate.value,
+      backup,
       (text) => {
         progress.value = text
       },
       targetDatasetId,
     )
-    finishRestore(uid, targetDatasetId)
+    if (!(await finishRestore(uid, targetDatasetId))) {
+      session.error =
+        '復元結果はサーバーで確認できましたが、該当する端末の保留状態を解除できません。状態確認まで操作を停止しています。'
+      return
+    }
     session.message = '復元の切り替えが完了しました。'
     candidate.value = null
   } catch (err) {
     session.error = errorMessage(err)
     if (reserved && !session.error.includes('切り替え結果を確認できません'))
-      finishRestore(uid, targetDatasetId)
+      if (!(await finishRestore(uid, targetDatasetId)))
+        session.error += ' 復元保留を解除できないため、状態確認まで操作を停止しています。'
   } finally {
     session.busy = false
     progress.value = ''
   }
-  await refresh()
+  if (!pending.value) await refresh()
 }
 async function confirmRestore() {
   const operation = pending.value
@@ -111,7 +162,11 @@ async function confirmRestore() {
       operation.expected,
       operation.targetDatasetId,
     )
-    finishRestore(operation.uid, operation.targetDatasetId)
+    if (!(await finishRestore(operation.uid, operation.targetDatasetId))) {
+      session.error =
+        'サーバー状態は確認できましたが、該当する端末の保留状態を解除できません。操作を継続保留しています。'
+      return
+    }
     session.message =
       status === 'switched'
         ? 'サーバーで復元の切り替えを確認しました。'
