@@ -21,9 +21,20 @@ export interface Loaded {
   head: Head
   cached: boolean
 }
+export type RestoreStatus = 'switched' | 'not-switched' | 'conflict'
 const kinds = ['qualifications', 'examAttempts', 'acquisitions'] as const
 const equal = (a: Head, b: Head) =>
   a.activeDatasetId === b.activeDatasetId && a.revision === b.revision
+export function classifyRestore(
+  expected: Head,
+  targetDatasetId: string,
+  current: Head,
+): RestoreStatus {
+  if (current.activeDatasetId === targetDatasetId && current.revision === expected.revision + 1)
+    return 'switched'
+  if (equal(expected, current)) return 'not-switched'
+  return 'conflict'
+}
 const clean = (value: unknown): DocumentData => JSON.parse(JSON.stringify(value))
 export class Repository {
   constructor(
@@ -50,8 +61,9 @@ export class Repository {
     expected: Head,
     backup: Backup,
     progress: (message: string) => void = () => {},
+    targetDatasetId: string = crypto.randomUUID(),
   ) {
-    await this.replace(expected, backupRecords(backup), progress)
+    await this.replace(expected, backupRecords(backup), progress, targetDatasetId)
   }
   async initialize() {
     const id = crypto.randomUUID()
@@ -126,13 +138,59 @@ export class Repository {
       tx.update(this.user(), { revision: before.head.revision + 1 })
     })
   }
-  async replace(expected: Head, records: Records, progress: (message: string) => void = () => {}) {
+  async confirmReplace(expected: Head, targetDatasetId: string): Promise<RestoreStatus> {
+    const first = await runTransaction(this.firestore, async (tx) => {
+      const root = await tx.get(this.user())
+      const meta = await tx.get(this.set(targetDatasetId))
+      if (!root.exists()) return 'conflict' as const
+      const head = root.data() as Head
+      const status = classifyRestore(expected, targetDatasetId, head)
+      if (status !== 'not-switched') return status
+      if (!meta.exists()) {
+        tx.set(this.set(targetDatasetId), {
+          status: 'building',
+          createdAt: new Date().toISOString(),
+          counts: this.counts(emptyRecords()),
+        })
+        return 'fence-needed' as const
+      }
+      if (meta.data().status !== 'retired') {
+        tx.update(this.set(targetDatasetId), { status: 'retired' })
+      }
+      tx.update(this.user(), { revision: expected.revision + 1 })
+      return 'not-switched' as const
+    })
+    if (first !== 'fence-needed') return first
+    return runTransaction(this.firestore, async (tx) => {
+      const root = await tx.get(this.user())
+      const meta = await tx.get(this.set(targetDatasetId))
+      if (!root.exists()) return 'conflict' as const
+      const status = classifyRestore(expected, targetDatasetId, root.data() as Head)
+      if (status !== 'not-switched') return status
+      if (!meta.exists()) {
+        tx.update(this.user(), { revision: expected.revision + 1 })
+        return 'not-switched' as const
+      }
+      if (meta.data().status !== 'retired')
+        tx.update(this.set(targetDatasetId), { status: 'retired' })
+      tx.update(this.user(), { revision: expected.revision + 1 })
+      return 'not-switched' as const
+    })
+  }
+  async replace(
+    expected: Head,
+    records: Records,
+    progress: (message: string) => void = () => {},
+    targetDatasetId: string = crypto.randomUUID(),
+  ) {
     validateRecords(records)
-    const id = crypto.randomUUID()
+    const id = targetDatasetId
     await runTransaction(this.firestore, async (tx) => {
       const root = await tx.get(this.user())
       if (!root.exists() || !equal(expected, root.data() as Head))
         fail('既存記録が変更されています。更新して復元をやり直してください。')
+      if ((await tx.get(this.set(id))).exists())
+        fail('この復元操作はすでに終了しています。状態を確認してください。')
       tx.set(this.set(id), {
         status: 'building',
         createdAt: new Date().toISOString(),
@@ -199,7 +257,7 @@ export class Repository {
         )
       }
       if (confirmed.exists() && confirmed.data().activeDatasetId === id) return
-      if (confirmed.exists() && confirmed.data().activeDatasetId !== expected.activeDatasetId)
+      if (confirmed.exists() && !equal(expected, confirmed.data() as Head))
         fail('別の操作で保存領域が切り替わりました。再取得して確認してください。')
       throw error
     }
