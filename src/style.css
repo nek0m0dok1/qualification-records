@@ -156,6 +156,9 @@ legend {
   margin: auto;
   padding: 0 40px;
 }
+.workspace-content {
+  padding-bottom: 5px;
+}
 .app-header {
   height: 104px;
   display: flex;
