@@ -14,6 +14,9 @@
     "test": "vitest run",
     "test:rules": "firebase emulators:exec --project demo-qualification-records --only firestore \"vitest run --config vitest.rules.config.ts\"",
     "test:e2e": "playwright test",
+    "emulators:pwa-e2e": "firebase emulators:start --project demo-qualification-records --only auth,firestore --config firebase.pwa-e2e.json",
+    "build:pwa-e2e": "vite build --mode pwa-e2e",
+    "test:pwa-e2e": "playwright test --config playwright.pwa.config.ts",
     "emulators": "firebase emulators:start --project demo-qualification-records --only auth,firestore",
     "check": "npm run typecheck && npm test && npm run build"
   },

@@ -59,13 +59,14 @@ export function refresh(): Promise<void> {
   const user = session.user
   if (!user?.emailVerified || session.busy) return Promise.resolve()
   const token = epoch,
-    key = `${epoch}:${user.uid}`,
-    repo = new Repository(user.uid)
+    key = `${epoch}:${user.uid}`
   const pending = fetches.get(key)
   if (pending) return pending
   session.fetching = true
+  let repo: Repository | null = null
   const current = (async () => {
     try {
+      repo = new Repository(user.uid)
       if (!navigator.onLine) throw new Error('offline')
       if (!session.initialized) {
         await repo.initialize()
@@ -94,7 +95,7 @@ export function refresh(): Promise<void> {
       session.writable = false
       session.cacheOnly = true
       try {
-        const loaded = await repo.load(true)
+        const loaded = await (repo ?? new Repository(user.uid)).load(true)
         if (token !== epoch) return
         session.loaded = loaded
         session.records = loaded.records
