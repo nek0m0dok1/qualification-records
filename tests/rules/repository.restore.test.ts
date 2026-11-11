@@ -381,7 +381,9 @@ describe('JSON backup restore safety on Firestore Emulator', () => {
           injected.failNextServerRead = true
         }
       }),
-    ).rejects.toThrow()
+    ).rejects.toThrow(
+      '復元の切り替え結果を確認できません。オンラインに戻って更新し、内容を確認してください。再実行はまだ行わないでください。',
+    )
 
     // The commit is real even though both the transaction response and follow-up read were lost.
     const committedHead = await rawHead()
@@ -417,5 +419,10 @@ describe('JSON backup restore safety on Firestore Emulator', () => {
     expect(await rawHead()).toEqual(active.head)
     expect(await rawRecords(active.head.activeDatasetId)).toEqual(activeRecords)
     expect(await rawDataset(retiredId)).toBeUndefined()
+    expect(await rawRecords(retiredId)).toEqual({
+      qualifications: [],
+      acquisitions: [],
+      examAttempts: [],
+    })
   })
 })
