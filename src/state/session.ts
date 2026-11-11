@@ -3,6 +3,7 @@ import { onAuthStateChanged, signOut, reload, getIdToken, type User } from 'fire
 import { auth, eraseCache, storageGet, storageSet, storageRemove } from '../services/firebase'
 import { Repository, type Loaded } from '../services/repository'
 import { emptyRecords, type Records } from '../domain/model'
+import { restorePending } from './restore'
 export const session = reactive({
   user: null as User | null,
   ready: false,
@@ -75,7 +76,7 @@ export function refresh(): Promise<void> {
       if (token !== epoch) return
       session.loaded = loaded
       session.records = loaded.records
-      session.writable = true
+      session.writable = !restorePending(user.uid)
       session.cacheOnly = false
       session.error = ''
       session.lastFetched = new Date().toISOString()
@@ -113,6 +114,7 @@ export function refresh(): Promise<void> {
 export async function changeRecords(transform: (records: Records) => Records): Promise<boolean> {
   if (
     !session.user ||
+    restorePending(session.user.uid) ||
     !session.loaded ||
     !session.writable ||
     !navigator.onLine ||

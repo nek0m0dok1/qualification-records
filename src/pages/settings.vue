@@ -5,10 +5,11 @@ import { ask } from '../state/ui'
 import { rememberDevice, storageSet } from '../services/firebase'
 import { makeBackup, parseBackup, type Backup } from '../domain/backup'
 import { Repository } from '../services/repository'
+import { beginRestore, finishRestore, restorePending } from '../state/restore'
 const candidate = ref<Backup | null>(null),
-  progress = ref(''),
-  uncertain = ref(false)
-const disabled = computed(() => session.busy || session.fetching || !session.writable)
+  progress = ref('')
+const pending = computed(() => session.user ? restorePending(session.user.uid) : null)
+const disabled = computed(() => session.busy || session.fetching || !session.writable || !!pending.value)
 async function exportJson() {
   if (!session.user || disabled.value) return
   session.busy = true
@@ -46,7 +47,7 @@ async function selectFile(event: Event) {
   input.value = ''
 }
 async function restore() {
-  if (!session.user || !session.loaded || !candidate.value || disabled.value || uncertain.value)
+  if (!session.user || !session.loaded || !candidate.value || disabled.value)
     return
   if (
     !(await ask(
@@ -57,24 +58,56 @@ async function restore() {
   session.busy = true
   session.error = ''
   session.message = ''
+  const uid = session.user.uid
+  const expected = plain(session.loaded.head)
+  const targetDatasetId = crypto.randomUUID()
+  let persisted = false
   try {
-    await new Repository(session.user.uid).replaceBackup(
-      plain(session.loaded.head),
+    beginRestore(uid, expected, targetDatasetId)
+    persisted = true
+    await new Repository(uid).replaceBackup(
+      expected,
       candidate.value,
       (text) => {
         progress.value = text
       },
+      targetDatasetId,
     )
+    finishRestore(uid)
     session.message = '復元の切り替えが完了しました。'
     candidate.value = null
   } catch (err) {
     session.error = errorMessage(err)
-    if (session.error.includes('切り替え結果を確認できません')) uncertain.value = true
+    if (persisted && !session.error.includes('切り替え結果を確認できません')) finishRestore(uid)
   } finally {
     session.busy = false
     progress.value = ''
   }
   await refresh()
+}
+async function confirmRestore() {
+  const operation = pending.value
+  if (!operation || !session.user || session.user.uid !== operation.uid || session.busy) return
+  session.busy = true
+  session.error = ''
+  session.message = ''
+  try {
+    const status = await new Repository(operation.uid).confirmReplace(
+      operation.expected,
+      operation.targetDatasetId,
+    )
+    finishRestore(operation.uid)
+    session.message = status === 'switched'
+      ? 'サーバーで復元の切り替えを確認しました。'
+      : status === 'not-switched'
+        ? 'サーバーでは切り替わっていません。既存記録は維持されています。ファイルを選び直して復元できます。'
+        : '別の操作で保存領域が変わっています。現在の記録を読み込み直しました。'
+  } catch (error) {
+    session.error = `サーバーで確認できませんでした。再実行は保留中です。${errorMessage(error)}`
+  } finally {
+    session.busy = false
+  }
+  if (!pending.value) await refresh()
 }
 async function toggleDevice() {
   if (
@@ -138,11 +171,12 @@ async function toggleDevice() {
           <p class="help">
             書き出し日時：{{ new Date(candidate.exportedAt).toLocaleString('ja-JP') }}
           </p>
-          <button :disabled="disabled || uncertain" @click="restore">内容を確認して全置換</button>
+          <button :disabled="disabled" @click="restore">内容を確認して全置換</button>
         </div>
         <p v-if="progress" role="status">{{ progress }}</p>
-        <p v-if="uncertain" class="notice error">
-          切り替え結果が未確認です。再実行せず、オンラインで更新して記録を確認してください。
+        <p v-if="pending" class="notice error" role="status">
+          復元の切り替え結果が未確認です。二重復元と記録の変更を止めています。オンラインでサーバー状態を確認してください。
+          <button :disabled="session.busy" @click="confirmRestore">サーバー状態を確認</button>
         </p>
       </section>
     </div>
