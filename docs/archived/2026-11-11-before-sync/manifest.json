@@ -1,34 +1,46 @@
 {
   "archive_date": "2026-11-11",
-  "note": "Historical snapshots; not current requirements.",
+  "note": "Historical source-commit snapshots; not current requirements. Working snapshots are raw source Git blobs, not the prior checkout line endings.",
   "entries": [
     {
       "source_commit": "014996e73d425940c773fd2a13bb29a1e8b478a1",
       "source_path": "docs/PRD.md",
       "archive_path": "working/docs/PRD.md",
-      "sha256": "e14fa1e93c3acfb180e79bf08c94f5a7398432fbf7e533f8dddf84ff2535ecb4",
-      "reason": "Edited to align current documentation with main implementation and record current verification separately."
+      "sha256": "d06ca9d892c3f71904cdc9040d701b85ae0722ad52fb18bf25254a3fa1cbd1ea",
+      "reason": "Edited to align current documentation with main implementation and record current verification separately.",
+      "source_blob": "0883b1d626bc27417bb8e138f878d892346d800d",
+      "size_bytes": 2823,
+      "snapshot_method": "Raw Git blob bytes from source_commit:source_path via git cat-file blob."
     },
     {
       "source_commit": "014996e73d425940c773fd2a13bb29a1e8b478a1",
       "source_path": "docs/plan.md",
       "archive_path": "working/docs/plan.md",
-      "sha256": "88dc8bf4cab09ade058f5c9d53575192462d00e1fdfcf770eba49e4eebb3daac",
-      "reason": "Edited to align current documentation with main implementation and record current verification separately."
+      "sha256": "2f798f63ae2ae341191ff519905150c95f2a36e9752c7dad3c94ed7fc89fa9b4",
+      "reason": "Edited to align current documentation with main implementation and record current verification separately.",
+      "source_blob": "a70a0071149aba623ee5f33dfec5b1a21a455082",
+      "size_bytes": 14308,
+      "snapshot_method": "Raw Git blob bytes from source_commit:source_path via git cat-file blob."
     },
     {
       "source_commit": "014996e73d425940c773fd2a13bb29a1e8b478a1",
       "source_path": "docs/database/data-model.md",
       "archive_path": "working/docs/database/data-model.md",
-      "sha256": "63979ee0e29040504c1845a0bd0f7c2da9dae7f5208493bf237f6c8524b98b3f",
-      "reason": "Edited to align current documentation with main implementation and record current verification separately."
+      "sha256": "18327764463685a111b025ee922265564bfb6b0ba89190a318de42bcb554a5f0",
+      "reason": "Edited to align current documentation with main implementation and record current verification separately.",
+      "source_blob": "1a93ccd1c6f9b4f6c57a46322f3ff6f7692dfbfd",
+      "size_bytes": 4932,
+      "snapshot_method": "Raw Git blob bytes from source_commit:source_path via git cat-file blob."
     },
     {
       "source_commit": "014996e73d425940c773fd2a13bb29a1e8b478a1",
       "source_path": "docs/database/data-handling.md",
       "archive_path": "working/docs/database/data-handling.md",
-      "sha256": "5f5c4eac5b964b4e82b95d495735b3ec5b6f0941f6d677e07edfabde787f12e1",
-      "reason": "Edited to align current documentation with main implementation and record current verification separately."
+      "sha256": "b22d97214109971a5c5f5d609dd25f6c703001824c20136e579f0d2489785652",
+      "reason": "Edited to align current documentation with main implementation and record current verification separately.",
+      "source_blob": "c92d6eefab47d325e944e7f441650d09201dd71e",
+      "size_bytes": 17809,
+      "snapshot_method": "Raw Git blob bytes from source_commit:source_path via git cat-file blob."
     },
     {
       "source_commit": "4a52f63830c0ab3d19f0d0f03e31cb3bf57f0e2e",
@@ -36,7 +48,9 @@
       "source_path": "docs/plan.md",
       "archive_path": "main/docs/plan.md",
       "sha256": "14efbc5b184184414205011be187e61d90cc22ddf9daa4f47def1b4a5b75fe55",
-      "reason": "Main differs from working branch; preserve main wording and history before synchronizing docs."
+      "reason": "Main differs from working branch; preserve main wording and history before synchronizing docs.",
+      "size_bytes": 12647,
+      "snapshot_method": "Raw Git blob bytes from source_blob; preserved unchanged."
     }
   ]
 }
