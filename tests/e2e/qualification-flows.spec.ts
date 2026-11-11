@@ -13,6 +13,42 @@ async function waitForAuthEmulator(request: APIRequestContext) {
   throw new Error('Firebase Auth Emulator did not become available')
 }
 
+async function createVerifiedAccount(request: APIRequestContext, email: string, password: string) {
+  const signup = await request.post(
+    'http://127.0.0.1:9099/identitytoolkit.googleapis.com/v1/accounts:signUp?key=demo-api-key',
+    { data: { email, password, returnSecureToken: true } },
+  )
+  expect(signup.ok(), await signup.text()).toBeTruthy()
+  const { localId, idToken: signupToken } = await signup.json()
+  const verification = await request.post(
+    'http://127.0.0.1:9099/identitytoolkit.googleapis.com/v1/accounts:sendOobCode?key=demo-api-key',
+    { data: { requestType: 'VERIFY_EMAIL', idToken: signupToken } },
+  )
+  expect(verification.ok(), await verification.text()).toBeTruthy()
+  const pendingCodes = await request.get(
+    'http://127.0.0.1:9099/emulator/v1/projects/demo-qualification-records/oobCodes',
+  )
+  expect(pendingCodes.ok()).toBeTruthy()
+  const { oobCodes } = await pendingCodes.json()
+  const { oobCode } =
+    oobCodes.find(
+      (code: { email: string; requestType: string }) =>
+        code.email === email && code.requestType === 'VERIFY_EMAIL',
+    ) ?? {}
+  const verified = await request.post(
+    'http://127.0.0.1:9099/identitytoolkit.googleapis.com/v1/accounts:update?key=demo-api-key',
+    { data: { oobCode } },
+  )
+  expect(verified.ok(), await verified.text()).toBeTruthy()
+  const signedIn = await request.post(
+    'http://127.0.0.1:9099/identitytoolkit.googleapis.com/v1/accounts:signInWithPassword?key=demo-api-key',
+    { data: { email, password, returnSecureToken: true } },
+  )
+  expect(signedIn.ok(), await signedIn.text()).toBeTruthy()
+  const { idToken } = await signedIn.json()
+  return { uid: localId as string, idToken: idToken as string }
+}
+
 async function registerQualification(page: Page, name: string, month: string) {
   await page.getByRole('button', { name: '＋ 記録を追加' }).click()
   await page.getByLabel('新資格の登録').check()
@@ -47,7 +83,7 @@ test('主要フロー: 取り消し後の訂正年月と自己削除・別画面
   request,
   browser,
 }) => {
-  test.setTimeout(60_000)
+  test.setTimeout(90_000)
   await waitForAuthEmulator(request)
   const email = `e2e-${Date.now()}@example.test`
   const password = 'e2e-password-123'
@@ -403,11 +439,133 @@ test('主要フロー: 取り消し後の訂正年月と自己削除・別画面
   await settingsTab.bringToFront()
   await restoreConsent.getByRole('button', { name: '同意して続ける' }).click()
   await expect(settingsTab.getByRole('alert')).toContainText(
-    /保存状態が変わりました|現在の状態では復元を開始できません/,
+    /既存記録が変更されています。更新して復元をやり直してください。/,
   )
   await expect(settingsTab.getByText(/復元の切り替え結果が未確認です/)).toHaveCount(0)
   await concurrentTab.reload()
   await expect(concurrentTab.getByRole('button', { name: /復元同意中の別タブ変更/ })).toBeVisible()
+
+  const refreshedBackup = settingsTab.waitForEvent('download')
+  await settingsTab.getByRole('button', { name: 'バックアップを書き出す' }).click()
+  const refreshedDownload = await refreshedBackup
+  await settingsTab.locator('input[type="file"]').setInputFiles((await refreshedDownload.path())!)
+  await settingsTab.getByRole('button', { name: '内容を確認して全置換' }).click()
+  const refreshedConsent = settingsTab.getByRole('dialog', { name: '変更内容の確認' })
+  await expect(refreshedConsent).toBeVisible()
+  await registerQualification(concurrentTab, '同意中refresh対象の別タブ変更', '2022-02')
+  await settingsTab.bringToFront()
+  const refreshButton = settingsTab.getByRole('button', { name: '記録を再取得' })
+  const fetchedAt = settingsTab.locator('.status-bar > span > small')
+  const previousFetch = await fetchedAt.innerText()
+  await settingsTab.waitForTimeout(1100)
+  await settingsTab.evaluate(() => {
+    document.querySelector<HTMLButtonElement>('.record-refresh button')?.click()
+  })
+  await expect(fetchedAt).not.toHaveText(previousFetch)
+  await expect(refreshButton).toBeEnabled()
+  await refreshedConsent.getByRole('button', { name: '同意して続ける' }).click()
+  await expect(settingsTab.getByRole('alert')).toHaveText(
+    '保存状態が変わりました。最新の記録を読み込んでから再確認してください。',
+  )
+  await expect(settingsTab.getByText(/復元の切り替え結果が未確認です/)).toHaveCount(0)
+  await expect(refreshButton).toBeEnabled()
+  await concurrentTab.reload()
+  await expect(
+    concurrentTab.getByRole('button', { name: /同意中refresh対象の別タブ変更/ }),
+  ).toBeVisible()
   await concurrentTab.close()
+  await settingsTab.close()
+})
+
+test('同意待機中にUIDが変わっても旧バックアップを別UIDへ復元しない', async ({ page, request }) => {
+  test.setTimeout(90_000)
+  await waitForAuthEmulator(request)
+  const firstEmail = `restore-owner-${Date.now()}@example.test`
+  const secondEmail = `restore-other-${Date.now()}@example.test`
+  const password = 'e2e-password-123'
+  const firstAccount = await createVerifiedAccount(request, firstEmail, password)
+  const secondAccount = await createVerifiedAccount(request, secondEmail, password)
+
+  await page.goto('/login')
+  await page.getByLabel('メールアドレス').fill(firstEmail)
+  await page.getByLabel('パスワード', { exact: true }).fill(password)
+  await page.getByLabel('ログイン状態を記憶する').check()
+  await page.getByRole('button', { name: 'ログイン' }).click()
+  await expect(page.getByRole('heading', { name: 'あなたの資格' })).toBeVisible()
+  await registerQualification(page, 'UID変更前の所有者資格', '2024-04')
+
+  const settingsTab = await page.context().newPage()
+  await settingsTab.goto('/settings')
+  const backupDownload = settingsTab.waitForEvent('download')
+  await settingsTab.getByRole('button', { name: 'バックアップを書き出す' }).click()
+  const backup = await backupDownload
+  await settingsTab.locator('input[type="file"]').setInputFiles((await backup.path())!)
+  await settingsTab.getByRole('button', { name: '内容を確認して全置換' }).click()
+  const consent = settingsTab.getByRole('dialog', { name: '変更内容の確認' })
+  await expect(consent).toBeVisible()
+
+  const switchingTab = await page.context().newPage()
+  await switchingTab.goto('/qualifications')
+  await expect(switchingTab.getByRole('button', { name: /UID変更前の所有者資格/ })).toBeVisible()
+  await switchingTab.getByRole('button', { name: 'アカウント' }).click()
+  await switchingTab.getByRole('button', { name: 'ログアウト' }).click()
+  await expect(switchingTab.getByRole('heading', { name: 'ログイン', exact: true })).toBeVisible()
+  await switchingTab.getByLabel('メールアドレス').fill(secondEmail)
+  await switchingTab.getByLabel('パスワード', { exact: true }).fill(password)
+  await switchingTab.getByRole('button', { name: 'ログイン' }).click()
+  await expect(switchingTab.getByRole('heading', { name: 'あなたの資格' })).toBeVisible()
+  await expect(settingsTab.getByRole('button', { name: new RegExp(secondEmail) })).toBeVisible()
+  await expect(consent).toBeVisible()
+
+  await consent.getByRole('button', { name: '同意して続ける' }).click()
+  await expect(settingsTab.getByRole('alert')).toHaveText(
+    'ログイン状態が変わりました。内容を再確認してください。',
+  )
+  await expect(settingsTab.getByRole('button', { name: '記録を再取得' })).toBeEnabled()
+  await expect(settingsTab.getByRole('button', { name: '＋ 記録を追加' })).toBeEnabled()
+  await expect(settingsTab.getByText(/復元の切り替え結果が未確認です/)).toHaveCount(0)
+  const pendingByUid = await settingsTab.evaluate(
+    ({ firstUid, secondUid }) => [
+      localStorage.getItem(`qr:restore-pending:${firstUid}`),
+      localStorage.getItem(`qr:restore-pending:${secondUid}`),
+    ],
+    { firstUid: firstAccount.uid, secondUid: secondAccount.uid },
+  )
+  expect(pendingByUid).toEqual([null, null])
+
+  const firestoreDocument = (uid: string) =>
+    `http://127.0.0.1:8080/v1/projects/demo-qualification-records/databases/(default)/documents/users/${uid}`
+  const firstRootResponse = await request.get(firestoreDocument(firstAccount.uid), {
+    headers: { Authorization: `Bearer ${firstAccount.idToken}` },
+  })
+  expect(firstRootResponse.ok(), await firstRootResponse.text()).toBeTruthy()
+  const firstRoot = await firstRootResponse.json()
+  const firstDatasetId = firstRoot.fields.activeDatasetId.stringValue as string
+  const firstRecordsResponse = await request.get(
+    `${firestoreDocument(firstAccount.uid)}/datasets/${firstDatasetId}/qualifications`,
+    { headers: { Authorization: `Bearer ${firstAccount.idToken}` } },
+  )
+  expect(firstRecordsResponse.ok(), await firstRecordsResponse.text()).toBeTruthy()
+  expect(
+    ((await firstRecordsResponse.json()).documents ?? []).map(
+      (document: { fields: { name: { stringValue: string } } }) => document.fields.name.stringValue,
+    ),
+  ).toEqual(['UID変更前の所有者資格'])
+
+  const secondRootResponse = await request.get(firestoreDocument(secondAccount.uid), {
+    headers: { Authorization: `Bearer ${secondAccount.idToken}` },
+  })
+  expect(secondRootResponse.ok(), await secondRootResponse.text()).toBeTruthy()
+  const secondRoot = await secondRootResponse.json()
+  const secondDatasetId = secondRoot.fields.activeDatasetId.stringValue as string
+  for (const kind of ['qualifications', 'acquisitions', 'examAttempts']) {
+    const response = await request.get(
+      `${firestoreDocument(secondAccount.uid)}/datasets/${secondDatasetId}/${kind}`,
+      { headers: { Authorization: `Bearer ${secondAccount.idToken}` } },
+    )
+    expect(response.ok(), await response.text()).toBeTruthy()
+    expect((await response.json()).documents ?? []).toEqual([])
+  }
+  await switchingTab.close()
   await settingsTab.close()
 })
