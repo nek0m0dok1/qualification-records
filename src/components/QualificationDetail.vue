@@ -21,6 +21,9 @@ const a = computed(() => session.records.acquisitions.find((x) => x.qualificatio
 const attempts = computed(() =>
   session.records.examAttempts.filter((x) => x.qualificationId === props.id),
 )
+const editableTags = computed(() =>
+  TAGS.filter((tag) => tag.selectable || q.value?.fixedTagIds.includes(tag.id)),
+)
 const editing = ref(false)
 const draft = reactive({
   name: '',
@@ -114,7 +117,7 @@ async function close() {
       <fieldset>
         <legend>固定タグ</legend>
         <div class="tag-options">
-          <label v-for="tag in TAGS" :key="tag.id" class="check"
+          <label v-for="tag in editableTags" :key="tag.id" class="check"
             ><input v-model="draft.fixedTagIds" type="checkbox" :value="tag.id" />{{
               tag.label
             }}</label
