@@ -1,5 +1,6 @@
 import {
   fail,
+  TAGS,
   type Records,
   type Result,
   type Direction,
@@ -27,6 +28,8 @@ export function register(records: Records, input: Registration): Records {
     if (!next.qualifications.some((x) => x.id === q.id)) fail('対象資格が見つかりません。')
   } else {
     if (next.qualifications.some((x) => x.id === q.id)) fail('資格IDが重複しています。')
+    if (q.fixedTagIds.some((tagId) => !TAGS.some((tag) => tag.id === tagId && tag.selectable)))
+      fail('選択できない固定タグが含まれています。')
     next.qualifications.push(q)
   }
   const include = input.result !== 'passed' || input.includeAttempt
@@ -137,6 +140,14 @@ export function editQualification(
   const next = structuredClone(records)
   const index = next.qualifications.findIndex((q) => q.id === qualification.id)
   if (index < 0) fail('資格が見つかりません。')
+  const existingTags = new Set(next.qualifications[index].fixedTagIds)
+  if (
+    qualification.fixedTagIds.some(
+      (tagId) =>
+        !existingTags.has(tagId) && !TAGS.some((tag) => tag.id === tagId && tag.selectable),
+    )
+  )
+    fail('選択できない固定タグは追加できません。')
   next.qualifications[index] = qualification
   const a = next.acquisitions.find((x) => x.qualificationId === qualification.id)
   if (a && acquiredMonth !== undefined) a.acquiredMonth = acquiredMonth
