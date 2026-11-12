@@ -4,11 +4,12 @@ import {
   cancelLatestRenewal,
   compareExamDates,
   deleteAttempt,
+  editQualification,
   editAttempt,
   register,
   ownedQualifications,
 } from '../../src/domain/records'
-import { formatDate, validDate } from '../../src/domain/validation'
+import { formatDate, validDate, validInputDate, validateRecords } from '../../src/domain/validation'
 import { backupRecords, makeBackup, parseBackup } from '../../src/domain/backup'
 import { ref } from 'vue'
 
@@ -29,14 +30,21 @@ describe('日付の検証と履歴の並び順', () => {
     expect(validDate('2024-04-31', true)).toBe(false)
     expect(validDate('2024-04', true)).toBe(true)
     expect(validDate('2024-4', true)).toBe(false)
-    expect(validDate('1900-01', true)).toBe(true)
-    expect(validDate('2100-12', true)).toBe(true)
-    expect(validDate('1900-01-01', true)).toBe(true)
-    expect(validDate('2100-12-31', true)).toBe(true)
-    expect(validDate('1899-12', true)).toBe(false)
-    expect(validDate('2101-01', true)).toBe(false)
-    expect(validDate('1899-12-31', true)).toBe(false)
-    expect(validDate('2101-01-01', true)).toBe(false)
+    expect(validInputDate('1900-01', true)).toBe(true)
+    expect(validInputDate('2100-12', true)).toBe(true)
+    expect(validInputDate('1900-01-01', true)).toBe(true)
+    expect(validInputDate('2100-12-31', true)).toBe(true)
+    expect(validInputDate('1900-02-29', true)).toBe(false)
+    expect(validInputDate('2000-02-29', true)).toBe(true)
+    expect(validInputDate('2100-02-29', true)).toBe(false)
+    expect(validInputDate('1899-12', true)).toBe(false)
+    expect(validInputDate('2101-01', true)).toBe(false)
+    expect(validInputDate('1899-12-31', true)).toBe(false)
+    expect(validInputDate('2101-01-01', true)).toBe(false)
+    expect(validDate('0001-01', true)).toBe(true)
+    expect(validDate('1899-12-31', true)).toBe(true)
+    expect(validDate('2101-01-01', true)).toBe(true)
+    expect(validDate('9999-12', true)).toBe(true)
     expect(validDate('1900-02-29', true)).toBe(false)
     expect(validDate('2000-02-29', true)).toBe(true)
     expect(validDate('2100-02-29', true)).toBe(false)
@@ -68,6 +76,87 @@ describe('日付の検証と履歴の並び順', () => {
       'earlier',
       'unknown',
     ])
+  })
+})
+
+describe('既存の日付との互換性と新しい日付の制限', () => {
+  const legacyRecords = () => ({
+    qualifications: [qualification('legacy-q', '旧日付の資格', [])],
+    acquisitions: [
+      {
+        id: 'legacy-q',
+        qualificationId: 'legacy-q',
+        acquiredMonth: '1899-01',
+        renewal: { month: '1899-02' },
+      },
+    ],
+    examAttempts: [
+      {
+        id: 'legacy-attempt',
+        qualificationId: 'legacy-q',
+        examDate: '2101-03',
+        result: 'failed' as const,
+      },
+    ],
+  })
+
+  it('範囲外の既存日付を検証・バックアップ往復で保持する', () => {
+    const records = legacyRecords()
+    expect(() => validateRecords(records)).not.toThrow()
+    const backup = makeBackup(records, new Date('2024-03-01T00:00:00.000Z'))
+    expect(parseBackup(JSON.stringify(backup))).toEqual(backup)
+  })
+
+  it('範囲外の日付を維持した資格訂正は許可し、新しい範囲外日付は拒否する', () => {
+    const records = legacyRecords()
+    const updated = editQualification(
+      records,
+      { ...records.qualifications[0], name: '訂正後の資格名' },
+      '1899-01',
+      '1899-02',
+    )
+    expect(updated.qualifications[0].name).toBe('訂正後の資格名')
+    expect(updated.acquisitions[0]).toEqual(records.acquisitions[0])
+    expect(() =>
+      editQualification(records, records.qualifications[0], '1898-12', '1899-02'),
+    ).toThrow()
+    expect(() =>
+      register(records, {
+        qualification: records.qualifications[0],
+        existing: true,
+        result: 'failed',
+        includeAttempt: true,
+        examDate: '2101-04',
+        attemptId: 'new-attempt',
+      }),
+    ).toThrow()
+    expect(() =>
+      register(records, {
+        qualification: records.qualifications[0],
+        existing: true,
+        result: 'passed',
+        includeAttempt: false,
+        month: '1899-03',
+        attemptId: 'new-pass',
+      }),
+    ).toThrow()
+    expect(
+      register(records, {
+        qualification: records.qualifications[0],
+        existing: true,
+        result: 'passed',
+        includeAttempt: false,
+        month: '1900-01',
+        attemptId: 'new-pass',
+      }).acquisitions[0].renewal?.month,
+    ).toBe('1900-01')
+  })
+
+  it('既存の範囲外受験日は保持でき、変更する日付には範囲を適用する', () => {
+    const records = legacyRecords()
+    expect(() => editAttempt(records, 'legacy-attempt', 'failed', '2101-03', true)).not.toThrow()
+    expect(() => editAttempt(records, 'legacy-attempt', 'failed', '2101-04', true)).toThrow()
+    expect(() => editAttempt(records, 'legacy-attempt', 'failed', '2100-12-31', true)).not.toThrow()
   })
 })
 

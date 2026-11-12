@@ -1,10 +1,10 @@
 <script setup lang="ts">
 import { computed, ref, useId, watch, onMounted, onUnmounted } from 'vue'
-import { MAX_DATE_YEAR, MIN_DATE_YEAR, validDate } from '../domain/validation'
+import { MAX_DATE_YEAR, MIN_DATE_YEAR, validDate, validInputDate } from '../domain/validation'
 
 const props = withDefaults(
-  defineProps<{ modelValue: string; label?: string; allowDay?: boolean }>(),
-  { label: '受験年月・日', allowDay: false },
+  defineProps<{ modelValue: string; label?: string; allowDay?: boolean; legacyValue?: string }>(),
+  { label: '受験年月・日', allowDay: false, legacyValue: '' },
 )
 const emit = defineEmits<{ 'update:modelValue': [value: string] }>()
 const id = useId(),
@@ -16,8 +16,21 @@ const root = ref<HTMLElement>()
 const yearOptions = computed(() =>
   Array.from({ length: MAX_DATE_YEAR - MIN_DATE_YEAR + 1 }, (_, i) => i + MIN_DATE_YEAR),
 )
+const legacyValueAllowed = computed(
+  () =>
+    props.legacyValue !== undefined &&
+    props.modelValue === props.legacyValue &&
+    validDate(props.legacyValue, props.allowDay),
+)
+const invalidNonemptyValue = computed(
+  () =>
+    props.modelValue !== '' &&
+    !validInputDate(props.modelValue, props.allowDay) &&
+    !legacyValueAllowed.value,
+)
 const yearOutOfRange = computed(() => {
-  const match = /^(\d{4})(?:-|$)/.exec(props.modelValue)
+  if (legacyValueAllowed.value) return false
+  const match = /^(\d{4,})(?:-|$)/.exec(props.modelValue)
   if (!match) return false
   const value = Number(match[1])
   return value < MIN_DATE_YEAR || value > MAX_DATE_YEAR
@@ -46,7 +59,7 @@ watch(
   () => props.modelValue,
   (value) => {
     const match = /^(\d{4})-(\d{2})/.exec(value)
-    if (match && validDate(`${match[1]}-${match[2]}`)) {
+    if (match && validInputDate(`${match[1]}-${match[2]}`)) {
       year.value = Number(match[1])
       month.value = Number(match[2])
     }
@@ -54,7 +67,7 @@ watch(
 )
 function closeCalendar() {
   if (!open.value) return
-  if (yearOutOfRange.value && !calendarChanged.value) {
+  if (invalidNonemptyValue.value && !calendarChanged.value) {
     open.value = false
     return
   }
@@ -84,7 +97,7 @@ onUnmounted(() => {
 })
 function chooseDay(day: number) {
   const value = `${calendarValue.value}-${String(day).padStart(2, '0')}`
-  if (validDate(value, true)) emit('update:modelValue', value)
+  if (validInputDate(value, true)) emit('update:modelValue', value)
   open.value = false
 }
 function clearDay() {
@@ -98,7 +111,7 @@ function openCalendar() {
   }
   const match = /^(\d{4})-(\d{2})/.exec(props.modelValue)
   calendarChanged.value = false
-  if (match && validDate(`${match[1]}-${match[2]}`)) {
+  if (match && validInputDate(`${match[1]}-${match[2]}`)) {
     year.value = Number(match[1])
     month.value = Number(match[2])
   }
@@ -113,8 +126,8 @@ function openCalendar() {
         :id="id"
         :value="modelValue"
         required
-        :maxlength="allowDay ? 10 : 7"
-        :pattern="valuePattern"
+        maxlength="64"
+        :pattern="legacyValueAllowed ? undefined : valuePattern"
         :aria-invalid="yearOutOfRange || undefined"
         :aria-describedby="yearOutOfRange ? `${id}-year-error` : undefined"
         :aria-label="label"

@@ -3,7 +3,7 @@ import { computed, reactive, ref } from 'vue'
 import { session, changeRecords, plain } from '../state/session'
 import { ui, discardWizard } from '../state/ui'
 import { resultLabel, type Result } from '../domain/model'
-import { formatDate, validDate } from '../domain/validation'
+import { formatDate, validInputDate } from '../domain/validation'
 import { register } from '../domain/records'
 import Modal from './Modal.vue'
 import ExamDateInput from './ExamDateInput.vue'
@@ -35,11 +35,14 @@ function validateStep() {
       throw new Error('受験履歴を登録するか選択してください。')
     if (
       draft.result === 'passed' &&
-      (!validDate(draft.month) ||
+      (!validInputDate(draft.month) ||
         (acquisition.value && draft.month < acquisition.value.acquiredMonth))
     )
       throw new Error('更新年月を正しく入力してください。更新年月は取得年月以降です。')
-    if ((draft.result !== 'passed' || draft.history === 'yes') && !validDate(draft.examDate, true))
+    if (
+      (draft.result !== 'passed' || draft.history === 'yes') &&
+      !validInputDate(draft.examDate, true)
+    )
       throw new Error('受験年月を入力してください。日は任意です。')
   }
 }
