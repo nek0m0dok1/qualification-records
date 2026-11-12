@@ -156,7 +156,9 @@ test('主要フロー: 取り消し後の訂正年月と自己削除・別画面
   const navBox = await nav.boundingBox()
   const mainBox = await page.locator('.workspace-content').boundingBox()
   expect(navBox && mainBox && navBox.x >= mainBox.x + mainBox.width).toBeTruthy()
-  const filterTrigger = nav.getByRole('button', { name: /検索・絞り込み/ })
+  const filterTrigger = page.getByRole('button', { name: /検索・絞り込み/ })
+  await expect(nav.getByRole('button', { name: /検索・絞り込み/ })).toHaveCount(0)
+  await expect(filterTrigger).toBeVisible()
   await filterTrigger.focus()
   await page.keyboard.press('Enter')
   const filterDialog = page.getByRole('dialog', { name: '資格の検索・絞り込み' })
@@ -533,7 +535,11 @@ test('同意待機中にUIDが変わっても旧バックアップを別UIDへ�
   await switchingTab.getByLabel('パスワード', { exact: true }).fill(password)
   await switchingTab.getByRole('button', { name: 'ログイン' }).click()
   await expect(switchingTab.getByRole('heading', { name: '資格一覧' })).toBeVisible()
-  await expect(settingsTab.getByRole('button', { name: new RegExp(secondEmail) })).toBeVisible()
+  await settingsTab.getByRole('button', { name: 'アカウント' }).click()
+  const accountDialog = settingsTab.getByRole('dialog', { name: 'アカウント' })
+  await expect(accountDialog.getByText(secondEmail, { exact: true })).toBeVisible()
+  await accountDialog.getByRole('button', { name: '閉じる' }).click()
+  await expect(accountDialog).toHaveCount(0)
 
   let releaseBobSave!: () => void
   let signalBobSave!: () => void
