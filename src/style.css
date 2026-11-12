@@ -1376,7 +1376,7 @@ select {
 }
 .filter-open {
   border-top: 1px solid #dfe5da;
-  border-radius: 0;
+  border-radius: 8px;
   padding-top: 12px;
   margin-top: 4px;
 }
