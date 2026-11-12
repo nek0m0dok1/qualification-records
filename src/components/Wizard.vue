@@ -7,10 +7,10 @@ import { formatDate, validDate, validateRecords } from '../domain/validation'
 import { register } from '../domain/records'
 import Modal from './Modal.vue'
 import ExamDateInput from './ExamDateInput.vue'
-const step = ref(ui.wizardQualificationId ? 1 : 0),
+const step = ref(0),
   error = ref('')
-const method = ref<'new' | 'existing' | ''>(ui.wizardQualificationId ? 'existing' : ''),
-  existingId = ref(ui.wizardQualificationId)
+const method = ref<'new' | 'existing' | ''>(''),
+  existingId = ref('')
 const draft = reactive({
   name: '',
   gradeOrCategory: '',
