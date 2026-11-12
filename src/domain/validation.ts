@@ -1,4 +1,6 @@
 import { TAGS, fail, type Records } from './model'
+export const MIN_DATE_YEAR = 1900
+export const MAX_DATE_YEAR = 2100
 export function formatDate(value: string): string {
   const [year, month, day] = value.split('-')
   return `${Number(year)}年${Number(month)}月${day ? `${Number(day)}日` : ''}`
@@ -11,7 +13,7 @@ export function validDate(value: unknown, dayAllowed = false): value is string {
   )
     return false
   const [year, month, day] = value.split('-').map(Number)
-  if (year < 1 || month < 1 || month > 12) return false
+  if (year < MIN_DATE_YEAR || year > MAX_DATE_YEAR || month < 1 || month > 12) return false
   if (day === undefined) return true
   const leap = year % 4 === 0 && (year % 100 !== 0 || year % 400 === 0)
   return day >= 1 && day <= [31, leap ? 29 : 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31][month - 1]

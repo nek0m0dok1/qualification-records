@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, ref, useId, watch, onMounted, onUnmounted } from 'vue'
-import { validDate } from '../domain/validation'
+import { MAX_DATE_YEAR, MIN_DATE_YEAR, validDate } from '../domain/validation'
 
 const props = withDefaults(
   defineProps<{ modelValue: string; label?: string; allowDay?: boolean }>(),
@@ -9,13 +9,24 @@ const props = withDefaults(
 const emit = defineEmits<{ 'update:modelValue': [value: string] }>()
 const id = useId(),
   open = ref(false),
+  calendarChanged = ref(false),
   year = ref(2024),
   month = ref(1)
 const root = ref<HTMLElement>()
-const yearOptions = computed(() => Array.from({ length: 9999 }, (_, i) => i + 1))
+const yearOptions = computed(() =>
+  Array.from({ length: MAX_DATE_YEAR - MIN_DATE_YEAR + 1 }, (_, i) => i + MIN_DATE_YEAR),
+)
+const yearOutOfRange = computed(() => {
+  const match = /^(\d{4})(?:-|$)/.exec(props.modelValue)
+  if (!match) return false
+  const value = Number(match[1])
+  return value < MIN_DATE_YEAR || value > MAX_DATE_YEAR
+})
 const monthOptions = Array.from({ length: 12 }, (_, i) => i + 1)
 const valuePattern = computed(() =>
-  props.allowDay ? '^\\d{4}-\\d{2}(-\\d{2})?$' : '^\\d{4}-\\d{2}$',
+  props.allowDay
+    ? '^(?:19\\d{2}|20\\d{2}|2100)-\\d{2}(-\\d{2})?$'
+    : '^(?:19\\d{2}|20\\d{2}|2100)-\\d{2}$',
 )
 const days = computed(() => {
   const date = new Date(0)
@@ -43,6 +54,10 @@ watch(
 )
 function closeCalendar() {
   if (!open.value) return
+  if (yearOutOfRange.value && !calendarChanged.value) {
+    open.value = false
+    return
+  }
   if (!props.allowDay || props.modelValue.slice(0, 7) !== calendarValue.value)
     emit('update:modelValue', calendarValue.value)
   open.value = false
@@ -82,7 +97,8 @@ function openCalendar() {
     return
   }
   const match = /^(\d{4})-(\d{2})/.exec(props.modelValue)
-  if (match) {
+  calendarChanged.value = false
+  if (match && validDate(`${match[1]}-${match[2]}`)) {
     year.value = Number(match[1])
     month.value = Number(match[2])
   }
@@ -99,6 +115,8 @@ function openCalendar() {
         required
         :maxlength="allowDay ? 10 : 7"
         :pattern="valuePattern"
+        :aria-invalid="yearOutOfRange || undefined"
+        :aria-describedby="yearOutOfRange ? `${id}-year-error` : undefined"
         :aria-label="label"
         :placeholder="allowDay ? 'YYYY-MM または YYYY-MM-DD' : 'YYYY-MM'"
         inputmode="numeric"
@@ -118,6 +136,9 @@ function openCalendar() {
         </svg>
       </button>
     </div>
+    <p v-if="yearOutOfRange" :id="`${id}-year-error`" class="notice error" role="alert">
+      年は{{ MIN_DATE_YEAR }}年から{{ MAX_DATE_YEAR }}年の範囲で入力してください。
+    </p>
     <div
       v-if="open"
       :id="`${id}-calendar`"
@@ -127,13 +148,13 @@ function openCalendar() {
     >
       <div class="date-picker-controls">
         <label
-          >年<select v-model.number="year" aria-label="年">
+          >年<select v-model.number="year" aria-label="年" @change="calendarChanged = true">
             <option v-for="y in yearOptions" :key="y" :value="y">
               {{ String(y).padStart(4, '0') }}
             </option>
           </select></label
         ><label
-          >月<select v-model.number="month" aria-label="月">
+          >月<select v-model.number="month" aria-label="月" @change="calendarChanged = true">
             <option v-for="m in monthOptions" :key="m" :value="m">{{ m }}月</option>
           </select></label
         >
