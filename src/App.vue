@@ -78,12 +78,14 @@ function accountLogout() {
       <AuthForm />
     </main>
     <div v-else class="workspace-layout">
-      <nav class="main-nav" aria-label="主要画面">
-        <div class="main-nav-links">
-          <RouterLink to="/qualifications">資格一覧</RouterLink
-          ><RouterLink to="/exam-attempts">受験履歴</RouterLink
-          ><RouterLink to="/settings">設定・バックアップ</RouterLink>
-        </div>
+      <aside class="workspace-sidebar">
+        <nav class="main-nav" aria-label="主要画面">
+          <div class="main-nav-links">
+            <RouterLink to="/qualifications">資格一覧</RouterLink
+            ><RouterLink to="/exam-attempts">受験履歴</RouterLink
+            ><RouterLink to="/settings">設定・バックアップ</RouterLink>
+          </div>
+        </nav>
         <button
           v-if="route.path === '/qualifications'"
           type="button"
@@ -95,7 +97,7 @@ function accountLogout() {
             filters.owned.tags.length
           }}</span>
         </button>
-      </nav>
+      </aside>
       <div class="workspace-content">
         <div class="status-bar">
           <span

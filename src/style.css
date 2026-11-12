@@ -1065,11 +1065,14 @@ select {
     grid-row: 1;
     min-width: 0;
   }
-  .main-nav {
+  .workspace-sidebar {
     grid-column: 2;
     grid-row: 1;
     position: sticky;
     top: 24px;
+    margin-top: 24px;
+  }
+  .main-nav {
     display: flex;
     flex-direction: column;
     gap: 8px;
@@ -1349,10 +1352,6 @@ select {
   border-radius: 12px;
   background: #fff;
 }
-.qualification-actions > button {
-  min-height: 46px;
-  padding-inline: 22px;
-}
 .qualification-actions label {
   width: min(270px, 55%);
   margin: 0;
@@ -1528,15 +1527,17 @@ select {
     grid-row: 1;
     min-width: 0;
   }
-  .main-nav {
+  .workspace-sidebar {
     grid-column: 2;
     grid-row: 1;
     position: sticky;
     top: 12px;
+    margin-top: 14px;
+  }
+  .main-nav {
     display: flex;
     flex-direction: column;
     gap: 5px;
-    margin-top: 14px;
     padding: 9px;
     border: 1px solid #dfe5da;
     border-radius: 12px;
@@ -1564,13 +1565,15 @@ select {
     width: 100%;
     min-width: 0;
   }
-  .main-nav {
+  .workspace-sidebar {
     order: -1;
     width: 100%;
+    margin-top: 10px;
+  }
+  .main-nav {
     display: flex;
     flex-direction: column;
     gap: 4px;
-    margin-top: 10px;
     border: 0;
   }
   .main-nav-links {
