@@ -43,7 +43,7 @@ async function signIn(page: Page, email: string, password: string) {
   await page.getByLabel('メールアドレス').fill(email)
   await page.getByLabel('パスワード', { exact: true }).fill(password)
   await page.getByRole('button', { name: 'ログイン' }).click()
-  await expect(page.getByRole('heading', { name: 'あなたの資格' })).toBeVisible()
+  await expect(page.getByRole('heading', { name: '資格一覧' })).toBeVisible()
 }
 
 test('廃止タグの新規選択を隠し、過去タグの表示・検索・訂正・復元を保つ', async ({

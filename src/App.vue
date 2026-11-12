@@ -3,7 +3,7 @@ import { computed, ref, watch, onUnmounted } from 'vue'
 import { useRegisterSW } from 'virtual:pwa-register/vue'
 import { session, refresh, logout, retryCacheDeletion } from './state/session'
 import { configured, rememberDevice } from './services/firebase'
-import { ui, closeDialog, openWizard } from './state/ui'
+import { ui, closeDialog } from './state/ui'
 import { filters } from './state/ui'
 import { useRoute } from 'vue-router'
 import { TAGS } from './domain/model'
@@ -79,9 +79,11 @@ function accountLogout() {
     </main>
     <div v-else class="workspace-layout">
       <nav class="main-nav" aria-label="主要画面">
-        <RouterLink to="/qualifications">あなたの資格</RouterLink
-        ><RouterLink to="/exam-attempts">受験履歴</RouterLink
-        ><RouterLink to="/settings">設定・バックアップ</RouterLink>
+        <div class="main-nav-links">
+          <RouterLink to="/qualifications">資格一覧</RouterLink
+          ><RouterLink to="/exam-attempts">受験履歴</RouterLink
+          ><RouterLink to="/settings">設定・バックアップ</RouterLink>
+        </div>
         <button
           v-if="route.path === '/qualifications'"
           type="button"
@@ -131,11 +133,6 @@ function accountLogout() {
           画面のオフライン表示の準備が完了しました。記録は取得済みの範囲で表示します。
         </p>
         <main><RouterView /></main>
-        <footer v-if="route.path !== '/qualifications'">
-          <button class="secondary" :disabled="updating || !session.writable" @click="openWizard()">
-            ＋ 記録を追加
-          </button>
-        </footer>
       </div>
     </div>
     <div v-if="sw.needRefresh.value" class="update-banner" role="status">

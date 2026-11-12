@@ -1364,6 +1364,34 @@ select {
   width: 100%;
   margin-top: 8px;
 }
+.main-nav-links {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.filter-open {
+  border-top: 1px solid #dfe5da;
+  border-radius: 0;
+  padding-top: 12px;
+  margin-top: 4px;
+}
+.exam-actions {
+  margin: 0 0 16px;
+}
+.exam-actions button {
+  min-height: 46px;
+  padding-inline: 22px;
+}
+.restore-warning {
+  margin: 14px 0;
+  padding: 12px 14px;
+  color: #752a25;
+  background: #fff0ea;
+  border: 1px solid #a73d36;
+  border-left-width: 5px;
+  border-radius: 7px;
+  font-weight: 700;
+}
 .selected-tags {
   border: 1px solid #dfe5da;
   border-radius: 8px;
@@ -1540,10 +1568,15 @@ select {
     order: -1;
     width: 100%;
     display: flex;
-    flex-wrap: wrap;
+    flex-direction: column;
     gap: 4px;
     margin-top: 10px;
     border: 0;
+  }
+  .main-nav-links {
+    flex-direction: row;
+    flex-wrap: wrap;
+    gap: 4px;
   }
   .main-nav a {
     padding: 7px 9px;
@@ -1554,6 +1587,11 @@ select {
   }
   .main-nav a.router-link-active {
     background: #edf2e9;
+  }
+  .filter-open {
+    width: 100%;
+    margin-top: 0;
+    text-align: left;
   }
   .qualification-actions {
     align-items: stretch;

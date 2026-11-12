@@ -191,7 +191,7 @@ async function close() {
             <path d="M3 6h18M9 6V3h6v3M5 6l1 15h12l1-15M10 10v7M14 10v7" />
           </svg></button
         ><button :disabled="!session.writable || session.busy" @click="addAttempt">
-          受験・更新を追加</button
+          更新・記録を追加</button
         ><button
           class="secondary"
           :disabled="!session.writable || session.busy"
