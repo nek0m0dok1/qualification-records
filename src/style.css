@@ -1352,6 +1352,10 @@ select {
   border-radius: 12px;
   background: #fff;
 }
+.qualification-actions > button {
+  min-height: 46px;
+  padding-inline: 22px;
+}
 .qualification-actions label {
   width: min(270px, 55%);
   margin: 0;
