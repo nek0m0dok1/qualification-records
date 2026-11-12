@@ -23,10 +23,7 @@ const legacyValueAllowed = computed(
     validDate(props.legacyValue, props.allowDay),
 )
 const invalidNonemptyValue = computed(
-  () =>
-    props.modelValue !== '' &&
-    !validInputDate(props.modelValue, props.allowDay) &&
-    !legacyValueAllowed.value,
+  () => props.modelValue !== '' && !validInputDate(props.modelValue, props.allowDay),
 )
 const yearOutOfRange = computed(() => {
   if (legacyValueAllowed.value) return false
