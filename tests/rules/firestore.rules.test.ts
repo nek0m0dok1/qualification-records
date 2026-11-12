@@ -11,7 +11,11 @@ let env: RulesTestEnvironment
 beforeAll(async () => {
   env = await initializeTestEnvironment({
     projectId: 'demo-qualification-records',
-    firestore: { host: '127.0.0.1', port: 8080, rules: await readFile('firestore.rules', 'utf8') },
+    firestore: {
+      host: process.env.FIRESTORE_EMULATOR_HOST?.split(':')[0] ?? '127.0.0.1',
+      port: Number(process.env.FIRESTORE_EMULATOR_HOST?.split(':')[1] ?? 8080),
+      rules: await readFile('firestore.rules', 'utf8'),
+    },
   })
   await env.clearFirestore()
   await env.withSecurityRulesDisabled(async (context) => {

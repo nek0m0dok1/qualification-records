@@ -3,6 +3,7 @@ import { onAuthStateChanged, signOut, reload, getIdToken, type User } from 'fire
 import { auth, eraseCache, storageGet, storageSet, storageRemove } from '../services/firebase'
 import { Repository, type Loaded } from '../services/repository'
 import { emptyRecords, type Records } from '../domain/model'
+import { restoreStatus, withMutationLock } from './restore'
 export const session = reactive({
   user: null as User | null,
   ready: false,
@@ -73,11 +74,15 @@ export function refresh(): Promise<void> {
       }
       const loaded = await repo.load()
       if (token !== epoch) return
+      const restore = restoreStatus(user.uid)
       session.loaded = loaded
       session.records = loaded.records
-      session.writable = true
+      session.writable = restore.kind === 'clear'
       session.cacheOnly = false
-      session.error = ''
+      session.error =
+        restore.kind === 'unavailable'
+          ? '端末の復元状態を確認できないため、通常変更と復元を停止しています。ブラウザーの保存領域を利用可能にして再読み込みしてください。'
+          : ''
       session.lastFetched = new Date().toISOString()
       storageSet(`qr:fetched:${user.uid}`, session.lastFetched)
       void repo.cleanup().catch(() => {
@@ -111,37 +116,49 @@ export function refresh(): Promise<void> {
   return current
 }
 export async function changeRecords(transform: (records: Records) => Records): Promise<boolean> {
-  if (
-    !session.user ||
-    !session.loaded ||
-    !session.writable ||
-    !navigator.onLine ||
-    session.busy ||
-    session.fetching
-  ) {
+  const uid = session.user?.uid
+  if (!uid) {
     session.error = '今は変更できません。オンラインで更新してください。'
     return false
   }
-  const token = epoch
-  session.busy = true
-  session.error = ''
-  session.message = ''
-  let saved = false
   try {
-    await new Repository(session.user.uid).save(
-      plain(session.loaded),
-      transform(plain(session.records)),
-    )
-    if (token !== epoch) return false
-    session.message = 'サーバーへの保存が完了しました。'
-    saved = true
+    return await withMutationLock(uid, async () => {
+      if (
+        session.user?.uid !== uid ||
+        restoreStatus(uid).kind !== 'clear' ||
+        !session.loaded ||
+        !session.writable ||
+        !navigator.onLine ||
+        session.busy ||
+        session.fetching
+      ) {
+        session.error = '今は変更できません。オンラインで更新してください。'
+        return false
+      }
+      const token = epoch
+      const loaded = plain(session.loaded)
+      const next = transform(plain(session.records))
+      session.busy = true
+      session.error = ''
+      session.message = ''
+      let saved = false
+      try {
+        await new Repository(uid).save(loaded, next)
+        if (token !== epoch) return false
+        session.message = 'サーバーへの保存が完了しました。'
+        saved = true
+      } catch (error) {
+        if (token === epoch) session.error = errorMessage(error)
+      } finally {
+        if (token === epoch) session.busy = false
+      }
+      if (saved) await refresh()
+      return saved
+    })
   } catch (error) {
-    if (token === epoch) session.error = errorMessage(error)
-  } finally {
-    if (token === epoch) session.busy = false
+    session.error = errorMessage(error)
+    return false
   }
-  if (saved) await refresh()
-  return saved
 }
 export async function logout(): Promise<void> {
   if (session.busy) return
@@ -198,6 +215,20 @@ export function startSession() {
     session.cacheOnly = true
   })
   window.addEventListener('online', () => void refresh())
+  window.addEventListener('storage', (event) => {
+    const uid = session.user?.uid
+    if (!uid || (event.key !== null && event.key !== `qr:restore-pending:${uid}`)) return
+    const state = restoreStatus(uid)
+    if (state.kind !== 'clear') {
+      session.writable = false
+      session.error =
+        state.kind === 'unavailable'
+          ? '端末の復元状態を確認できないため、通常変更と復元を停止しています。保存領域を確認してください。'
+          : '別のタブで復元を開始しました。先にサーバー状態を確認してください。'
+    } else {
+      void refresh()
+    }
+  })
   document.addEventListener('visibilitychange', () => {
     if (document.visibilityState === 'visible') void refresh()
   })
