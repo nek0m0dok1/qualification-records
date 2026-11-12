@@ -802,12 +802,6 @@ dd {
   color: #234e47;
   font-size: 13px;
 }
-.account small {
-  display: block;
-  color: #687970;
-  font-weight: 400;
-  overflow-wrap: anywhere;
-}
 .record-refresh {
   text-align: right;
   max-width: 55%;
@@ -821,9 +815,6 @@ dd {
   .account {
     max-width: 100%;
     font-size: 12px;
-  }
-  .account small {
-    font-size: 11px;
   }
   .record-refresh small {
     font-size: 10px;

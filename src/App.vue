@@ -52,7 +52,7 @@ function accountLogout() {
         :disabled="blocked || updating || ui.wizardOpen || !!ui.dialog"
         @click="accountOpen = true"
       >
-        <span>アカウント</span><small>{{ session.user.email }}</small>
+        <span>アカウント</span>
       </button>
     </header>
     <main v-if="!configured" class="setup">
