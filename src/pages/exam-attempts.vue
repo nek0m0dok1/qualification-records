@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
 import { session, changeRecords } from '../state/session'
-import { filters, ask } from '../state/ui'
+import { filters, ask, openWizard } from '../state/ui'
 import { resultLabel, type Result } from '../domain/model'
 import { formatDate } from '../domain/validation'
 import { filteredAttempts, editAttempt, deleteAttempt, linkedImpact } from '../domain/records'
@@ -63,9 +63,13 @@ async function remove(id: string) {
       <div>
         <p class="eyebrow">EXAM HISTORY</p>
         <h1>受験履歴</h1>
-        <p>合否にかかわらず、挑戦の記録を残す。</p>
       </div>
       <span class="count">{{ session.records.examAttempts.length }}<small>件の記録</small></span>
+    </div>
+    <div class="exam-actions">
+      <button :disabled="!session.writable || session.busy" @click="openWizard()">
+        ＋ 記録を追加
+      </button>
     </div>
     <div class="filter-panel">
       <label class="search-label"

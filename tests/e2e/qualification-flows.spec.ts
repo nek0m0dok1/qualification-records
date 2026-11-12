@@ -69,7 +69,7 @@ async function registerQualification(page: Page, name: string, month: string) {
 }
 
 async function addRenewalFromDetail(page: Page, month: string) {
-  await page.getByRole('button', { name: '受験・更新を追加' }).click()
+  await page.getByRole('button', { name: '更新・記録を追加' }).click()
   await page.getByRole('button', { name: '次へ' }).click()
   await page.getByRole('button', { name: '次へ' }).click()
   await page.getByLabel('あなたの資格のみ登録する').check()
@@ -137,14 +137,14 @@ test('主要フロー: 取り消し後の訂正年月と自己削除・別画面
   await page.getByRole('button', { name: 'ログイン' }).click()
   const verifyButton = page.getByRole('button', { name: 'メール確認の完了を確認' })
   if (await verifyButton.count()) await verifyButton.click()
-  await expect(page.getByRole('heading', { name: 'あなたの資格' })).toBeVisible()
+  await expect(page.getByRole('heading', { name: '資格一覧' })).toBeVisible()
   await expect(page).toHaveURL(/qualifications$/)
   await expect(page.getByRole('button', { name: '記録を再取得', exact: true })).toBeEnabled({
     timeout: 15_000,
   })
   const rememberedTab = await page.context().newPage()
   await rememberedTab.goto('/qualifications')
-  await expect(rememberedTab.getByRole('heading', { name: 'あなたの資格' })).toBeVisible()
+  await expect(rememberedTab.getByRole('heading', { name: '資格一覧' })).toBeVisible()
   await expect(
     rememberedTab.getByRole('button', { name: '記録を再取得', exact: true }),
   ).toBeEnabled({ timeout: 15_000 })
@@ -152,14 +152,13 @@ test('主要フロー: 取り消し後の訂正年月と自己削除・別画面
   await page.setViewportSize({ width: 719, height: 607 })
   const nav = page.getByRole('navigation', { name: '主要画面' })
   await expect(nav).toBeVisible()
-  await expect(nav.getByRole('link', { name: 'あなたの資格' })).toHaveAttribute(
-    'aria-current',
-    'page',
-  )
+  await expect(nav.getByRole('link', { name: '資格一覧' })).toHaveAttribute('aria-current', 'page')
   const navBox = await nav.boundingBox()
   const mainBox = await page.locator('.workspace-content').boundingBox()
   expect(navBox && mainBox && navBox.x >= mainBox.x + mainBox.width).toBeTruthy()
-  const filterTrigger = nav.getByRole('button', { name: /検索・絞り込み/ })
+  const filterTrigger = page.getByRole('button', { name: /検索・絞り込み/ })
+  await expect(nav.getByRole('button', { name: /検索・絞り込み/ })).toHaveCount(0)
+  await expect(filterTrigger).toBeVisible()
   await filterTrigger.focus()
   await page.keyboard.press('Enter')
   const filterDialog = page.getByRole('dialog', { name: '資格の検索・絞り込み' })
@@ -280,24 +279,26 @@ test('主要フロー: 取り消し後の訂正年月と自己削除・別画面
   await expect(filterTrigger).toBeFocused()
   await expect(page.getByText('0件を表示')).toBeVisible()
   await expect(page.getByRole('button', { name: '＋ 記録を追加' })).toBeVisible()
-  const footerAdd = page.locator('footer').getByRole('button', { name: '＋ 記録を追加' })
+  await expect(page.locator('footer')).toHaveCount(0)
   for (const path of ['/exam-attempts', '/settings']) {
     await nav.locator(`a[href="${path}"]`).click()
     await expect(page).toHaveURL(new RegExp(`${path}$`))
     await expect(page.locator(`a[href="${path}"]`)).toHaveAttribute('aria-current', 'page')
-    await expect(footerAdd).toBeVisible()
-    await expect(footerAdd).toBeEnabled()
-    await footerAdd.click()
-    const startWizard = page.getByRole('dialog', { name: '資格・受験の記録' })
-    await expect(startWizard).toBeVisible()
-    await startWizard.locator('header').getByRole('button').click()
-    await expect(startWizard).toHaveCount(0)
+    if (path === '/exam-attempts') {
+      const pageAdd = page.getByRole('button', { name: '＋ 記録を追加' })
+      await expect(pageAdd).toBeVisible()
+      await expect(pageAdd).toBeEnabled()
+      await pageAdd.click()
+      const startWizard = page.getByRole('dialog', { name: '資格・受験の記録' })
+      await expect(startWizard).toBeVisible()
+      await startWizard.locator('header').getByRole('button').click()
+      await expect(startWizard).toHaveCount(0)
+    } else {
+      await expect(page.getByRole('button', { name: '＋ 記録を追加' })).toHaveCount(0)
+    }
   }
   await nav.locator('a[href="/qualifications"]').last().click()
-  await expect(nav.getByRole('link', { name: 'あなたの資格' })).toHaveAttribute(
-    'aria-current',
-    'page',
-  )
+  await expect(nav.getByRole('link', { name: '資格一覧' })).toHaveAttribute('aria-current', 'page')
   await expect(page.locator('footer')).toHaveCount(0)
   await page.setViewportSize({ width: 719, height: 611 })
   const narrowLayout = await page.evaluate(() => ({
@@ -362,7 +363,7 @@ test('主要フロー: 取り消し後の訂正年月と自己削除・別画面
   ).not.toContainText('取得年月')
   const card = page.getByRole('button', { name: /E2E削除資格/ })
   await card.click()
-  await page.getByRole('button', { name: '受験・更新を追加' }).click()
+  await page.getByRole('button', { name: '更新・記録を追加' }).click()
   await page.getByRole('button', { name: '次へ' }).click()
   await page.getByRole('button', { name: '次へ' }).click()
   await page.getByLabel('あなたの資格のみ登録する').check()
@@ -434,7 +435,7 @@ test('主要フロー: 取り消し後の訂正年月と自己削除・別画面
 
   const concurrentTab = await page.context().newPage()
   await concurrentTab.goto('/qualifications')
-  await expect(concurrentTab.getByRole('heading', { name: 'あなたの資格' })).toBeVisible()
+  await expect(concurrentTab.getByRole('heading', { name: '資格一覧' })).toBeVisible()
   await registerQualification(concurrentTab, '復元同意中の別タブ変更', '2021-01')
   await settingsTab.bringToFront()
   await restoreConsent.getByRole('button', { name: '同意して続ける' }).click()
@@ -491,7 +492,7 @@ test('同意待機中にUIDが変わっても旧バックアップを別UIDへ�
   await page.getByLabel('パスワード', { exact: true }).fill(password)
   await page.getByLabel('ログイン状態を記憶する').check()
   await page.getByRole('button', { name: 'ログイン' }).click()
-  await expect(page.getByRole('heading', { name: 'あなたの資格' })).toBeVisible()
+  await expect(page.getByRole('heading', { name: '資格一覧' })).toBeVisible()
   await registerQualification(page, 'UID変更前の所有者資格', '2024-04')
 
   const settingsTab = await page.context().newPage()
@@ -533,8 +534,12 @@ test('同意待機中にUIDが変わっても旧バックアップを別UIDへ�
   await switchingTab.getByLabel('メールアドレス').fill(secondEmail)
   await switchingTab.getByLabel('パスワード', { exact: true }).fill(password)
   await switchingTab.getByRole('button', { name: 'ログイン' }).click()
-  await expect(switchingTab.getByRole('heading', { name: 'あなたの資格' })).toBeVisible()
-  await expect(settingsTab.getByRole('button', { name: new RegExp(secondEmail) })).toBeVisible()
+  await expect(switchingTab.getByRole('heading', { name: '資格一覧' })).toBeVisible()
+  await settingsTab.getByRole('button', { name: 'アカウント' }).click()
+  const accountDialog = settingsTab.getByRole('dialog', { name: 'アカウント' })
+  await expect(accountDialog.getByText(secondEmail, { exact: true })).toBeVisible()
+  await accountDialog.getByRole('button', { name: '閉じる' }).click()
+  await expect(accountDialog).toHaveCount(0)
 
   let releaseBobSave!: () => void
   let signalBobSave!: () => void
@@ -564,7 +569,7 @@ test('同意待機中にUIDが変わっても旧バックアップを別UIDへ�
   await bobSave
   await expect(settingsTab.getByRole('button', { name: 'バックアップを書き出す' })).toBeEnabled()
   await expect(settingsTab.getByRole('button', { name: '記録を再取得' })).toBeEnabled()
-  await expect(settingsTab.getByRole('button', { name: '＋ 記録を追加' })).toBeEnabled()
+  await expect(settingsTab.getByRole('button', { name: '＋ 記録を追加' })).toHaveCount(0)
   await expect(settingsTab.getByText(/復元の切り替え結果が未確認です/)).toHaveCount(0)
   const pendingByUid = await settingsTab.evaluate(
     ({ firstUid, secondUid }) => [
@@ -650,7 +655,7 @@ test('復元のロック待機中に開始した同一UIDの書き出しbusyを�
   await page.getByLabel('パスワード', { exact: true }).fill(password)
   await page.getByLabel('ログイン状態を記憶する').check()
   await page.getByRole('button', { name: 'ログイン' }).click()
-  await expect(page.getByRole('heading', { name: 'あなたの資格' })).toBeVisible()
+  await expect(page.getByRole('heading', { name: '資格一覧' })).toBeVisible()
 
   const settingsTab = await page.context().newPage()
   await settingsTab.goto('/settings')
