@@ -17,6 +17,7 @@ export default defineConfig({
     {
       command: 'npm run emulators:pwa-e2e',
       url: 'http://127.0.0.1:9295/',
+      env: { XDG_CONFIG_HOME: `${process.cwd()}/.runtime/firebase-config` },
       reuseExistingServer: false,
       timeout: 60_000,
     },
