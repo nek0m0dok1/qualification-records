@@ -1,0 +1,288 @@
+import { expect, test, type APIRequestContext, type Page } from '@playwright/test'
+
+const authEmulator = 'http://127.0.0.1:9099'
+const firestoreEmulator = 'http://127.0.0.1:8080'
+const projectId = 'demo-qualification-records'
+const expectedScale = Array.from({ length: 100 }, (_, i) => {
+  const id = `q-${String(i).padStart(3, '0')}`
+  return {
+    id,
+    name: i === 37 ? 'Scale Search Target' : `Scale Qualification ${String(i).padStart(3, '0')}`,
+    acquiredMonth: `20${String(10 + (i % 15)).padStart(2, '0')}-${String((i % 12) + 1).padStart(2, '0')}`,
+    fixedTagIds: i % 2 === 0 ? ['it', 'business-finance'] : ['it'],
+  }
+})
+
+function documentIds(documents: { name: string }[] = []) {
+  return documents.map((item) => item.name.split('/').at(-1)!).sort()
+}
+
+type BrowserDiagnostics = {
+  consoleErrors: string[]
+  pageErrors: string[]
+  failedRequests: string[]
+  badResponses: string[]
+}
+const diagnostics = new WeakMap<Page, BrowserDiagnostics>()
+
+test.afterEach(async ({ page }, testInfo) => {
+  const browser = diagnostics.get(page)
+  if (!browser) return
+  const state = await page
+    .evaluate(() => ({
+      online: navigator.onLine,
+      viewport: { width: innerWidth, height: innerHeight },
+    }))
+    .catch(() => null)
+  const ui = await page
+    .evaluate(() => ({
+      alerts: [...document.querySelectorAll('[role="alert"]')].map((item) =>
+        item.textContent?.trim(),
+      ),
+      counts: [...document.querySelectorAll('.count')].map((item) => item.textContent?.trim()),
+      status: document.querySelector('.status-bar')?.textContent?.trim(),
+    }))
+    .catch(() => null)
+  await testInfo.attach('browser-sdk-diagnostics.json', {
+    body: JSON.stringify({ state, ui, ...browser }, null, 2),
+    contentType: 'application/json',
+  })
+})
+
+async function createVerifiedAccount(request: APIRequestContext, email: string) {
+  const signup = await request.post(
+    `${authEmulator}/identitytoolkit.googleapis.com/v1/accounts:signUp?key=demo-api-key`,
+    { data: { email, password: 'e2e-password-123', returnSecureToken: true } },
+  )
+  expect(signup.ok(), await signup.text()).toBeTruthy()
+  const { localId, idToken } = await signup.json()
+  const codeResponse = await request.post(
+    `${authEmulator}/identitytoolkit.googleapis.com/v1/accounts:sendOobCode?key=demo-api-key`,
+    { data: { requestType: 'VERIFY_EMAIL', idToken } },
+  )
+  expect(codeResponse.ok(), await codeResponse.text()).toBeTruthy()
+  const codes = await request.get(`${authEmulator}/emulator/v1/projects/${projectId}/oobCodes`)
+  const { oobCodes } = await codes.json()
+  const { oobCode } = oobCodes.find(
+    (item: { email: string; requestType: string }) =>
+      item.email === email && item.requestType === 'VERIFY_EMAIL',
+  )
+  const verified = await request.post(
+    `${authEmulator}/identitytoolkit.googleapis.com/v1/accounts:update?key=demo-api-key`,
+    { data: { oobCode } },
+  )
+  expect(verified.ok(), await verified.text()).toBeTruthy()
+  const signedIn = await request.post(
+    `${authEmulator}/identitytoolkit.googleapis.com/v1/accounts:signInWithPassword?key=demo-api-key`,
+    { data: { email, password: 'e2e-password-123', returnSecureToken: true } },
+  )
+  expect(signedIn.ok(), await signedIn.text()).toBeTruthy()
+  return { uid: localId as string, email }
+}
+
+const string = (value: string) => ({ stringValue: value })
+const number = (value: number) => ({ integerValue: String(value) })
+const array = (values: string[]) => ({ arrayValue: { values: values.map(string) } })
+const document = (name: string, fields: Record<string, unknown>) => ({
+  update: { name, fields },
+})
+
+async function seedScaleData(request: APIRequestContext, uid: string) {
+  const root = `projects/${projectId}/databases/(default)/documents/users/${uid}`
+  const datasetId = `scale-${Date.now()}`
+  const dataset = `${root}/datasets/${datasetId}`
+  const writes = [
+    document(root, { activeDatasetId: string(datasetId), revision: number(0) }),
+    document(`${dataset}`, {
+      status: string('ready'),
+      createdAt: string(new Date().toISOString()),
+      counts: {
+        mapValue: {
+          fields: {
+            qualifications: number(100),
+            acquisitions: number(100),
+            examAttempts: number(300),
+          },
+        },
+      },
+    }),
+  ]
+  for (const qualification of expectedScale) {
+    const i = Number(qualification.id.slice(2))
+    const fields = {
+      name: string(qualification.name),
+      gradeOrCategory: string(`Grade ${i % 5}`),
+      fixedTagIds: array(qualification.fixedTagIds),
+      memo: string('scale fixture'),
+      qualificationId: string(qualification.id),
+      acquiredMonth: string(qualification.acquiredMonth),
+    }
+    writes.push(
+      document(`${dataset}/qualifications/${qualification.id}`, {
+        name: fields.name,
+        gradeOrCategory: fields.gradeOrCategory,
+        fixedTagIds: fields.fixedTagIds,
+        memo: fields.memo,
+      }),
+    )
+    writes.push(
+      document(`${dataset}/acquisitions/${qualification.id}`, {
+        qualificationId: fields.qualificationId,
+        acquiredMonth: fields.acquiredMonth,
+      }),
+    )
+  }
+  for (let i = 0; i < 300; i++) {
+    const q = i % 100
+    writes.push(
+      document(`${dataset}/examAttempts/e-${String(i).padStart(3, '0')}`, {
+        qualificationId: string(`q-${String(q).padStart(3, '0')}`),
+        examDate: string(
+          `20${String(10 + (i % 15)).padStart(2, '0')}-${String((i % 12) + 1).padStart(2, '0')}-${String((i % 28) + 1).padStart(2, '0')}`,
+        ),
+        result: string(['passed', 'failed', 'pending'][i % 3]),
+      }),
+    )
+  }
+  // Keep every REST commit below Firestore's 500-write batch limit.
+  for (let offset = 0; offset < writes.length; offset += 200) {
+    const commit = await request.post(
+      `${firestoreEmulator}/v1/projects/${projectId}/databases/(default)/documents:commit`,
+      // Emulator owner bypass is restricted to local fixture creation. Browser reads
+      // still go through the real client SDK with the user's Auth Emulator token.
+      {
+        headers: { Authorization: 'Bearer owner' },
+        data: { writes: writes.slice(offset, offset + 200) },
+        timeout: 10_000,
+      },
+    )
+    expect(
+      commit.ok(),
+      `fixture writes ${offset}-${offset + 199}: ${await commit.text()}`,
+    ).toBeTruthy()
+  }
+  const rootResponse = await request.get(`${firestoreEmulator}/v1/${root}`, {
+    headers: { Authorization: 'Bearer owner' },
+    timeout: 5_000,
+  })
+  expect(rootResponse.ok(), await rootResponse.text()).toBeTruthy()
+  const rootDocument = await rootResponse.json()
+  expect(rootDocument.fields.activeDatasetId.stringValue).toBe(datasetId)
+  expect(rootDocument.fields.revision.integerValue).toBe('0')
+  const datasetResponse = await request.get(`${firestoreEmulator}/v1/${dataset}`, {
+    headers: { Authorization: 'Bearer owner' },
+    timeout: 5_000,
+  })
+  expect(datasetResponse.ok(), await datasetResponse.text()).toBeTruthy()
+  const metadata = (await datasetResponse.json()).fields
+  expect(metadata.status.stringValue).toBe('ready')
+  expect({
+    qualifications: metadata.counts.mapValue.fields.qualifications.integerValue,
+    acquisitions: metadata.counts.mapValue.fields.acquisitions.integerValue,
+    examAttempts: metadata.counts.mapValue.fields.examAttempts.integerValue,
+  }).toEqual({ qualifications: '100', acquisitions: '100', examAttempts: '300' })
+
+  const collections = ['qualifications', 'acquisitions', 'examAttempts'] as const
+  const listing = await Promise.all(
+    collections.map(async (collectionName) => {
+      const response = await request.get(
+        `${firestoreEmulator}/v1/${dataset}/${collectionName}?pageSize=1000`,
+        { headers: { Authorization: 'Bearer owner' }, timeout: 10_000 },
+      )
+      expect(response.ok(), `${collectionName} list: ${await response.text()}`).toBeTruthy()
+      return [collectionName, (await response.json()).documents ?? []] as const
+    }),
+  )
+  const rows = Object.fromEntries(listing) as Record<string, { name: string }[]>
+  expect(rows.qualifications).toHaveLength(100)
+  expect(rows.acquisitions).toHaveLength(100)
+  expect(rows.examAttempts).toHaveLength(300)
+  expect(documentIds(rows.qualifications)).toEqual(expectedScale.map(({ id }) => id).sort())
+  expect(documentIds(rows.acquisitions)).toEqual(expectedScale.map(({ id }) => id).sort())
+  expect(documentIds(rows.examAttempts)).toEqual(
+    Array.from({ length: 300 }, (_, i) => `e-${String(i).padStart(3, '0')}`).sort(),
+  )
+}
+
+async function signIn(page: Page, email: string) {
+  await page.goto('/login')
+  await page.getByLabel('メールアドレス').fill(email)
+  await page.getByLabel('パスワード', { exact: true }).fill('e2e-password-123')
+  await page.getByLabel('ログイン状態を記憶する').check()
+  await page.getByRole('button', { name: 'ログイン' }).click()
+  await expect(page.getByRole('heading', { name: 'あなたの資格' })).toBeVisible()
+}
+
+test('100資格・300受験履歴を実Firestore SDKで取得し検索・AND絞り込み・日付順を保つ', async ({
+  page,
+  request,
+}) => {
+  test.setTimeout(90_000)
+  const browserDiagnostics: BrowserDiagnostics = {
+    consoleErrors: [],
+    pageErrors: [],
+    failedRequests: [],
+    badResponses: [],
+  }
+  diagnostics.set(page, browserDiagnostics)
+  page.on('console', (message) => {
+    if (message.type() === 'error') browserDiagnostics.consoleErrors.push(message.text())
+  })
+  page.on('pageerror', (error) => browserDiagnostics.pageErrors.push(error.message))
+  page.on('requestfailed', (request) => {
+    browserDiagnostics.failedRequests.push(
+      `${request.method()} ${request.url()}: ${request.failure()?.errorText}`,
+    )
+  })
+  page.on('response', (response) => {
+    if (response.status() >= 400)
+      browserDiagnostics.badResponses.push(`${response.status()} ${response.url()}`)
+  })
+  const viewport = page.viewportSize()
+  if (test.info().project.name === 'android-viewport')
+    expect(viewport).toEqual({ width: 412, height: 915 })
+
+  const account = await createVerifiedAccount(request, `scale-${Date.now()}@example.test`)
+  await seedScaleData(request, account.uid)
+  await page.addInitScript(() => localStorage.setItem('qr:remember', 'true'))
+  await signIn(page, account.email)
+
+  await expect(page.locator('.count')).toContainText('100', { timeout: 20_000 })
+  await page.getByRole('link', { name: '受験履歴' }).click()
+  await expect(page.locator('.count')).toContainText('300', { timeout: 20_000 })
+  await expect(page.locator('.attempt-row')).toHaveCount(300, { timeout: 20_000 })
+  const dates = await page.locator('.attempt-row time').allTextContents()
+  expect(dates[0]).toBe('2024年12月20日')
+  await page.getByLabel('資格名を検索').fill('Scale Search Target')
+  await expect(page.locator('.result-count')).toHaveText('3件を表示')
+  await page.getByRole('link', { name: 'あなたの資格' }).click()
+  await expect(page.locator('.qualification-card')).toHaveCount(100)
+  await page.getByRole('button', { name: '検索・絞り込み' }).click()
+  const qualificationFilter = page.getByRole('dialog', { name: '資格の検索・絞り込み' })
+  await qualificationFilter.getByLabel('資格名を検索').fill('Scale Qualification')
+  await qualificationFilter.getByRole('button', { name: 'ビジネス・金融' }).click()
+  await qualificationFilter.getByRole('button', { name: 'IT' }).click()
+  await qualificationFilter.getByRole('button', { name: '閉じる' }).click()
+  await expect(page.locator('.qualification-card')).toHaveCount(50)
+  await page.getByLabel('並び順').selectOption('asc')
+  const names = await page.locator('.qualification-card h2').allTextContents()
+  const expectedNames = expectedScale
+    .filter(
+      (qualification) =>
+        qualification.name.includes('Scale Qualification') &&
+        ['it', 'business-finance'].every((tag) => qualification.fixedTagIds.includes(tag)),
+    )
+    .sort((a, b) =>
+      a.acquiredMonth > b.acquiredMonth
+        ? 1
+        : a.acquiredMonth < b.acquiredMonth
+          ? -1
+          : a.id > b.id
+            ? 1
+            : a.id < b.id
+              ? -1
+              : 0,
+    )
+    .map(({ name }) => name)
+  expect(names).toEqual(expectedNames)
+})
