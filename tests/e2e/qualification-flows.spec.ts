@@ -54,6 +54,7 @@ async function registerQualification(page: Page, name: string, month: string) {
   await page.getByLabel('新資格の登録').check()
   await page.getByRole('button', { name: '次へ' }).click()
   await page.getByRole('textbox', { name: '資格名' }).fill(name)
+  await page.getByLabel('受験結果').selectOption('passed')
   await page.getByRole('button', { name: '次へ' }).click()
   await page.getByLabel('あなたの資格のみ登録する').check()
   await page.getByRole('button', { name: '取得年月カレンダーを開く', exact: true }).click()
@@ -70,6 +71,7 @@ async function registerQualification(page: Page, name: string, month: string) {
 
 async function addRenewalFromDetail(page: Page, month: string) {
   await page.getByRole('button', { name: '更新・記録を追加' }).click()
+  await page.getByLabel('受験結果').selectOption('passed')
   await page.getByRole('button', { name: '次へ' }).click()
   await page.getByRole('button', { name: '次へ' }).click()
   await page.getByLabel('あなたの資格のみ登録する').check()
@@ -77,6 +79,56 @@ async function addRenewalFromDetail(page: Page, month: string) {
   await page.getByRole('button', { name: '次へ' }).click()
   await page.getByRole('button', { name: '記録を保存' }).click()
 }
+
+test('既存資格の結果は明示選択が必要で、未操作終了では破棄確認を出さない', async ({
+  page,
+  request,
+}) => {
+  test.setTimeout(90_000)
+  await waitForAuthEmulator(request)
+  const email = `result-selection-${Date.now()}@example.test`
+  const password = 'e2e-password-123'
+  await createVerifiedAccount(request, email, password)
+
+  await page.goto('/login')
+  await page.getByLabel('メールアドレス').fill(email)
+  await page.getByLabel('パスワード', { exact: true }).fill(password)
+  await page.getByLabel('ログイン状態を記憶する').check()
+  await page.getByRole('button', { name: 'ログイン' }).click()
+  await expect(page.getByRole('heading', { name: '資格一覧' })).toBeVisible()
+  await registerQualification(page, '結果未選択の回帰確認', '2024-04')
+
+  await page.getByRole('button', { name: /結果未選択の回帰確認/ }).click()
+  await page.getByRole('button', { name: '更新・記録を追加' }).click()
+  const wizard = page.getByRole('dialog', { name: '資格・受験の記録' })
+  const result = wizard.getByLabel('受験結果')
+  const nextButton = wizard.getByRole('button', { name: '次へ' })
+  await expect(result).toHaveValue('')
+  await expect(result.locator('option').first()).toHaveText('選択してください')
+  await expect(result).toHaveAttribute('required', '')
+  await expect(nextButton).toBeDisabled()
+  await wizard
+    .locator('form')
+    .evaluate((form) =>
+      form.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true })),
+    )
+  await expect(wizard.getByText('受験結果を選択してください。')).toBeVisible()
+  await expect(wizard.getByText('この内容で保存します')).toHaveCount(0)
+  await wizard.locator('header').getByRole('button', { name: '閉じる' }).click()
+  await expect(page.getByRole('dialog')).toHaveCount(0)
+
+  await page.getByRole('button', { name: /結果未選択の回帰確認/ }).click()
+  await page.getByRole('button', { name: '更新・記録を追加' }).click()
+  const reopened = page.getByRole('dialog', { name: '資格・受験の記録' })
+  await reopened.getByLabel('受験結果').selectOption('passed')
+  await reopened.getByRole('button', { name: '次へ' }).click()
+  await reopened.getByLabel('あなたの資格のみ登録する').check()
+  await reopened.getByRole('textbox', { name: '更新年月', exact: true }).fill('2024-05')
+  await reopened.getByRole('button', { name: '次へ' }).click()
+  await reopened.getByRole('button', { name: '記録を保存' }).click()
+  await expect(reopened).toHaveCount(0)
+  await expect(page.getByRole('button', { name: /結果未選択の回帰確認/ })).toBeVisible()
+})
 
 test('主要フロー: 取り消し後の訂正年月と自己削除・別画面からの削除', async ({
   page,
@@ -364,6 +416,7 @@ test('主要フロー: 取り消し後の訂正年月と自己削除・別画面
   const card = page.getByRole('button', { name: /E2E削除資格/ })
   await card.click()
   await page.getByRole('button', { name: '更新・記録を追加' }).click()
+  await page.getByLabel('受験結果').selectOption('passed')
   await page.getByRole('button', { name: '次へ' }).click()
   await page.getByRole('button', { name: '次へ' }).click()
   await page.getByLabel('あなたの資格のみ登録する').check()

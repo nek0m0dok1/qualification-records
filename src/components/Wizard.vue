@@ -16,7 +16,7 @@ const draft = reactive({
   gradeOrCategory: '',
   fixedTagIds: [] as string[],
   memo: '',
-  result: 'passed' as Result,
+  result: '' as Result | '',
   history: '' as '' | 'yes' | 'no',
   month: '',
   examDate: '',
@@ -26,6 +26,7 @@ const newId = crypto.randomUUID(),
 const existing = computed(() =>
   session.records.qualifications.find((q) => q.id === existingId.value),
 )
+const resultText = computed(() => (draft.result ? resultLabel[draft.result] : ''))
 const acquisition = computed(() =>
   method.value === 'existing'
     ? session.records.acquisitions.find((a) => a.qualificationId === existingId.value)
@@ -42,6 +43,7 @@ const qualification = (): Qualification =>
         memo: draft.memo,
       }
 function resetTarget() {
+  draft.result = ''
   draft.month = ''
   draft.examDate = ''
   draft.history = ''
@@ -49,6 +51,7 @@ function resetTarget() {
   ui.wizardDirty = true
 }
 function validateStep() {
+  if (step.value >= 1 && !draft.result) throw new Error('受験結果を選択してください。')
   if (step.value === 0 && (!method.value || (method.value === 'existing' && !existing.value)))
     throw new Error('新資格または対象の既存資格を選択してください。')
   if (step.value === 1)
@@ -81,11 +84,16 @@ function next() {
   }
 }
 async function save() {
+  const result = draft.result
+  if (step.value !== 3 || !result) {
+    error.value = '受験結果を選択してください。'
+    return
+  }
   const saved = await changeRecords((records) =>
     register(records, {
       qualification: qualification(),
       existing: method.value === 'existing',
-      result: draft.result,
+      result,
       includeAttempt: draft.history === 'yes',
       examDate: draft.examDate,
       month: draft.month,
@@ -159,7 +167,8 @@ async function save() {
         <p v-else class="target-summary">{{ existing?.name }} {{ existing?.gradeOrCategory }}</p>
         <label
           >受験結果<span class="required-marker" aria-hidden="true"></span
-          ><select v-model="draft.result">
+          ><select v-model="draft.result" required aria-required="true">
+            <option value="">選択してください</option>
             <option v-for="(label, value) in resultLabel" :key="value" :value="value">
               {{ label }}
             </option>
@@ -169,7 +178,7 @@ async function save() {
       <div v-if="step === 2">
         <p class="target-summary">
           {{ qualification().name }} {{ qualification().gradeOrCategory }} ·
-          {{ resultLabel[draft.result] }}
+          {{ resultText }}
         </p>
         <template v-if="draft.result === 'passed'"
           ><fieldset>
@@ -205,7 +214,7 @@ async function save() {
           <dt>資格</dt>
           <dd>{{ qualification().name }} {{ qualification().gradeOrCategory }}</dd>
           <dt>結果</dt>
-          <dd>{{ resultLabel[draft.result] }}</dd>
+          <dd>{{ resultText }}</dd>
           <template v-if="draft.result === 'passed'"
             ><dt>{{ acquisition ? '更新年月' : '取得年月' }}</dt>
             <dd>{{ formatDate(draft.month) }}</dd></template
@@ -232,7 +241,11 @@ async function save() {
           @click="goBack"
         >
           戻る</button
-        ><button :disabled="session.busy || !session.writable || session.fetching">
+        ><button
+          :disabled="
+            session.busy || !session.writable || session.fetching || (step === 1 && !draft.result)
+          "
+        >
           {{ session.busy ? '保存中…' : step === 3 ? '記録を保存' : '次へ' }}
         </button>
       </div>
