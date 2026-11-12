@@ -10,7 +10,9 @@ import {
   clearIndexedDbPersistence,
   type Firestore,
 } from 'firebase/firestore'
-export const emulatorMode = import.meta.env.DEV && import.meta.env.VITE_USE_EMULATORS === 'true'
+const pwaTestMode = import.meta.env.MODE === 'pwa-e2e'
+export const emulatorMode =
+  pwaTestMode || (import.meta.env.DEV && import.meta.env.VITE_USE_EMULATORS === 'true')
 export const configured =
   emulatorMode ||
   Boolean(
@@ -55,12 +57,17 @@ export function storageRemove(key: string) {
 const app = configured ? initializeApp(config) : null
 export const auth = app ? getAuth(app) : null
 if (auth && emulatorMode)
-  connectAuthEmulator(auth, 'http://127.0.0.1:9099', { disableWarnings: true })
+  connectAuthEmulator(auth, pwaTestMode ? 'http://127.0.0.1:9295' : 'http://127.0.0.1:9099', {
+    disableWarnings: true,
+  })
 export const rememberDevice = storageGet('qr:remember') === 'true'
 let db: Firestore | null = null
 export function database(): Firestore {
   if (!app) throw new Error('Firebase設定がありません。.envを設定して再起動してください。')
   if (!db) {
+    if (pwaTestMode && storageGet('qr:pwa-e2e-cache-unavailable') === 'true') {
+      throw Object.assign(new Error('failed-precondition'), { code: 'failed-precondition' })
+    }
     db = initializeFirestore(app, {
       localCache: rememberDevice
         ? persistentLocalCache({
@@ -68,12 +75,16 @@ export function database(): Firestore {
           })
         : memoryLocalCache(),
     })
-    if (emulatorMode) connectFirestoreEmulator(db, '127.0.0.1', 8080)
+    if (emulatorMode) connectFirestoreEmulator(db, '127.0.0.1', pwaTestMode ? 8195 : 8080)
   }
   return db
 }
 export async function eraseCache(): Promise<void> {
   if (!app) return
+  if (pwaTestMode && storageGet('qr:pwa-e2e-cache-delete-fails') === 'true') {
+    storageRemove('qr:pwa-e2e-cache-delete-fails')
+    throw Object.assign(new Error('failed-precondition'), { code: 'failed-precondition' })
+  }
   const instance = database()
   await terminate(instance)
   await clearIndexedDbPersistence(instance)
