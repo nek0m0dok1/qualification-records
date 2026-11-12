@@ -1,0 +1,16 @@
+{
+  "archive_date": "2026-11-12",
+  "note": "Historical source snapshot, not a current status statement.",
+  "entries": [
+    {
+      "source_commit": "511ce0a8b35891988c21b4b861815b2b678f723c",
+      "source_blob": "4bbd2622452f40747b1eeaa0ff5f9c513395de69",
+      "source_path": "docs/implementation-status.md",
+      "archive_path": "working/docs/implementation-status.md",
+      "size_bytes": 9511,
+      "sha256": "92afee6c5a50fb206a1380045096a753d93c7f60156f6748a0419d9360884fcc",
+      "snapshot_method": "Raw Git blob bytes retrieved by git cat-file blob and written with binary file I/O.",
+      "reason": "Preserve the exact implementation-status document before updating current main and offline-verification state."
+    }
+  ]
+}

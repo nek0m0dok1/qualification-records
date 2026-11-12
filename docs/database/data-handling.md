@@ -1,4 +1,11 @@
+---
+name: Qualification data handling
+discription: Defines confirmed rules for entry, validation, updates, display, storage, and restore of qualification records.
+---
+
 # 資格管理アプリ：データの扱い
+
+> Document status: confirmed product rules. Updated: 2026-11-11. Scope: user workflows and record consistency. This is not a verification report; see [implementation status](../implementation-status.md).
 
 本書は、登録・入力検証・更新・表示・保存・復元のルールを定義する。項目・型・参照関係は `data-model.md` を参照する。
 
