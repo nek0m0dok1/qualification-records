@@ -199,7 +199,7 @@ legend {
   display: flex;
   gap: 36px;
   border-bottom: 1px solid #dde3d9;
-  margin-top: 14px;
+  margin-top: 0;
 }
 .main-nav a {
   padding: 15px 0;
@@ -698,6 +698,9 @@ dd {
     font-size: 12px;
     justify-content: space-between;
   }
+  .filter-open {
+    font-size: 12px;
+  }
   .status-bar small {
     display: block;
     margin-left: 0;
@@ -1080,7 +1083,6 @@ select {
     border-radius: 12px;
     padding: 12px;
     background: #fff;
-    margin-top: 24px;
   }
   .main-nav a {
     padding: 12px;
