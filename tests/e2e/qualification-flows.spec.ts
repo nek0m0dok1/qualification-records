@@ -165,11 +165,17 @@ test('受験履歴の検索と結果フィルターをサイドバーのダイ�
   await page.getByRole('button', { name: '検索・絞り込み' }).click()
   const ownedDialog = page.getByRole('dialog', { name: '資格の検索・絞り込み' })
   await expect(ownedDialog.getByRole('searchbox', { name: '資格名を検索' })).toBeVisible()
+  await ownedDialog
+    .getByRole('group', { name: 'ジャンル候補' })
+    .getByRole('button', { name: 'IT', exact: true })
+    .click()
+  await expect(ownedDialog.getByRole('button', { name: 'ITを解除' })).toBeVisible()
   await ownedDialog.getByRole('button', { name: '閉じる' }).click()
 
   await page.getByRole('link', { name: '受験履歴' }).click()
   await page.getByRole('button', { name: '検索・絞り込み' }).click()
   const attemptsDialog = page.getByRole('dialog', { name: '受験履歴の検索・絞り込み' })
+  await expect(attemptsDialog.getByRole('button', { name: 'ITを解除' })).toHaveCount(0)
   const search = attemptsDialog.getByRole('searchbox', { name: '資格名を検索' })
   await search.fill('検索語')
   await expect(search).toHaveValue('検索語')
@@ -178,6 +184,7 @@ test('受験履歴の検索と結果フィルターをサイドバーのダイ�
   await expect(passed).toHaveAttribute('aria-pressed', 'true')
   const selected = attemptsDialog.getByRole('button', { name: '合格を解除' })
   await expect(selected).toBeVisible()
+  await expect(attemptsDialog.getByRole('button', { name: 'ITを解除' })).toHaveCount(0)
   await selected.click()
   await expect(attemptsDialog.getByRole('button', { name: '合格を解除' })).toHaveCount(0)
   await passed.click()
@@ -185,6 +192,25 @@ test('受験履歴の検索と結果フィルターをサイドバーのダイ�
 
   await page.setViewportSize({ width: 390, height: 844 })
   await page.screenshot({ path: testInfo.outputPath('attempt-filter-mobile.png') })
+  await attemptsDialog.getByRole('button', { name: '閉じる' }).click()
+  await page.getByRole('link', { name: '資格一覧' }).click()
+  await page.getByRole('button', { name: '検索・絞り込み' }).click()
+  const reopenedOwnedDialog = page.getByRole('dialog', { name: '資格の検索・絞り込み' })
+  await expect(reopenedOwnedDialog.getByRole('button', { name: 'ITを解除' })).toBeVisible()
+  await expect(reopenedOwnedDialog.getByRole('button', { name: '合格を解除' })).toHaveCount(0)
+  await reopenedOwnedDialog.getByRole('button', { name: '閉じる' }).click()
+  await page.getByRole('link', { name: '受験履歴' }).click()
+  await page.getByRole('button', { name: '検索・絞り込み' }).click()
+  await expect(
+    page.getByRole('dialog', { name: '受験履歴の検索・絞り込み' }).getByRole('button', {
+      name: '合格を解除',
+    }),
+  ).toBeVisible()
+  await expect(
+    page.getByRole('dialog', { name: '受験履歴の検索・絞り込み' }).getByRole('button', {
+      name: 'ITを解除',
+    }),
+  ).toHaveCount(0)
   await page.evaluate(() => {
     window.history.pushState({}, '', '/qualifications')
     window.dispatchEvent(new PopStateEvent('popstate'))

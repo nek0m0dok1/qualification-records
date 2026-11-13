@@ -231,20 +231,22 @@ function accountLogout() {
           }}
         </p>
         <div class="selected-tag-list">
-          <span
-            v-for="tag in TAGS.filter((item) => ownedFilter.tags.includes(item.id))"
-            :key="tag.id"
-            class="selected-tag"
-          >
-            {{ tag.label }}
-            <button
-              type="button"
-              :aria-label="tag.label + 'を解除'"
-              @click="ownedFilter.tags = ownedFilter.tags.filter((id) => id !== tag.id)"
+          <template v-if="route.path === '/qualifications'">
+            <span
+              v-for="tag in TAGS.filter((item) => ownedFilter.tags.includes(item.id))"
+              :key="tag.id"
+              class="selected-tag"
             >
-              ×
-            </button>
-          </span>
+              {{ tag.label }}
+              <button
+                type="button"
+                :aria-label="tag.label + 'を解除'"
+                @click="ownedFilter.tags = ownedFilter.tags.filter((id) => id !== tag.id)"
+              >
+                ×
+              </button>
+            </span>
+          </template>
           <template v-if="route.path === '/exam-attempts'">
             <span v-for="result in filters.attempts.results" :key="result" class="selected-tag">
               {{ resultLabel[result] }}
