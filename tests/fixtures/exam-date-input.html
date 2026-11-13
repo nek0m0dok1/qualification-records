@@ -1,0 +1,58 @@
+<!doctype html>
+<html lang="ja">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Exam date input focused fixture</title>
+    <link rel="stylesheet" href="/src/style.css" />
+  </head>
+  <body>
+    <main style="max-width: 480px; margin: 24px auto; padding: 16px">
+      <div id="app"></div>
+    </main>
+    <script type="module">
+      import { createApp, h, ref } from 'vue'
+      import ExamDateInput from '/src/components/ExamDateInput.vue'
+
+      const value = ref('2024-05-12')
+      const submitted = ref(0)
+      window.examDateFixture = { value, submitted }
+
+      createApp({
+        setup() {
+          return () =>
+            h(
+              'form',
+              {
+                onSubmit: (event) => {
+                  event.preventDefault()
+                  submitted.value += 1
+                },
+              },
+              [
+                h(ExamDateInput, {
+                  modelValue: value.value,
+                  label: '受験年月（日は任意）',
+                  allowDay: true,
+                  'onUpdate:modelValue': (nextValue) => {
+                    value.value = nextValue
+                  },
+                }),
+                h('button', { type: 'submit' }, '保存'),
+                h(
+                  'button',
+                  {
+                    type: 'button',
+                    onClick: () => {
+                      value.value = ''
+                    },
+                  },
+                  '外部値を空にする',
+                ),
+              ],
+            )
+        },
+      }).mount('#app')
+    </script>
+  </body>
+</html>
