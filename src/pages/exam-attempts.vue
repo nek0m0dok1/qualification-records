@@ -66,47 +66,16 @@ async function remove(id: string) {
       </div>
       <span class="count">{{ session.records.examAttempts.length }}<small>件の記録</small></span>
     </div>
-    <div class="exam-actions">
+    <div class="qualification-actions">
       <button :disabled="!session.writable || session.busy" @click="openWizard()">
         ＋ 記録を追加
       </button>
-    </div>
-    <div class="filter-panel">
-      <label class="search-label"
-        >資格名を検索<input
-          v-model="filter.search"
-          type="search"
-          placeholder="資格名の一部を入力" /></label
-      ><label
+      <label
         >並び順<select v-model="filter.direction">
           <option value="desc">受験年月：新しい順</option>
           <option value="asc">受験年月：古い順</option>
         </select></label
       >
-      <details class="filter-accordion">
-        <summary>
-          受験結果で絞り込み
-          <span v-if="filter.results.length" class="filter-count"
-            >{{ filter.results.length }}件選択</span
-          >
-        </summary>
-        <div class="tag-options">
-          <button
-            v-for="(label, value) in resultLabel"
-            :key="value"
-            type="button"
-            class="filter-chip"
-            :aria-pressed="filter.results.includes(value)"
-            @click="
-              filter.results = filter.results.includes(value)
-                ? filter.results.filter((result) => result !== value)
-                : [...filter.results, value]
-            "
-          >
-            {{ label }}
-          </button>
-        </div>
-      </details>
     </div>
     <p class="result-count">{{ rows.length }}件を表示</p>
     <div class="attempt-list">

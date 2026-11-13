@@ -145,6 +145,80 @@ async function addRenewalFromDetail(page: Page, month: string) {
   await page.getByRole('button', { name: '記録を保存' }).click()
 }
 
+test('受験履歴の検索と結果フィルターをサイドバーのダイアログで操作できる', async ({
+  page,
+  request,
+}, testInfo) => {
+  test.setTimeout(90_000)
+  await waitForAuthEmulator(request)
+  const email = `attempt-filter-${Date.now()}@example.test`
+  const password = 'e2e-password-123'
+  await createVerifiedAccount(request, email, password)
+
+  await page.goto('/login')
+  await page.getByLabel('メールアドレス').fill(email)
+  await page.getByLabel('パスワード', { exact: true }).fill(password)
+  await page.getByLabel('ログイン状態を記憶する').check()
+  await page.getByRole('button', { name: 'ログイン' }).click()
+  await expect(page.getByRole('heading', { name: '資格一覧' })).toBeVisible()
+
+  await page.getByRole('button', { name: '検索・絞り込み' }).click()
+  const ownedDialog = page.getByRole('dialog', { name: '資格の検索・絞り込み' })
+  await expect(ownedDialog.getByRole('searchbox', { name: '資格名を検索' })).toBeVisible()
+  await ownedDialog
+    .getByRole('group', { name: 'ジャンル候補' })
+    .getByRole('button', { name: 'IT', exact: true })
+    .click()
+  await expect(ownedDialog.getByRole('button', { name: 'ITを解除' })).toBeVisible()
+  await ownedDialog.getByRole('button', { name: '閉じる' }).click()
+
+  await page.getByRole('link', { name: '受験履歴' }).click()
+  await page.getByRole('button', { name: '検索・絞り込み' }).click()
+  const attemptsDialog = page.getByRole('dialog', { name: '受験履歴の検索・絞り込み' })
+  await expect(attemptsDialog.getByRole('button', { name: 'ITを解除' })).toHaveCount(0)
+  const search = attemptsDialog.getByRole('searchbox', { name: '資格名を検索' })
+  await search.fill('検索語')
+  await expect(search).toHaveValue('検索語')
+  const passed = attemptsDialog.getByRole('button', { name: '合格', exact: true })
+  await passed.click()
+  await expect(passed).toHaveAttribute('aria-pressed', 'true')
+  const selected = attemptsDialog.getByRole('button', { name: '合格を解除' })
+  await expect(selected).toBeVisible()
+  await expect(attemptsDialog.getByRole('button', { name: 'ITを解除' })).toHaveCount(0)
+  await selected.click()
+  await expect(attemptsDialog.getByRole('button', { name: '合格を解除' })).toHaveCount(0)
+  await passed.click()
+  await page.screenshot({ path: testInfo.outputPath('attempt-filter-desktop.png') })
+
+  await page.setViewportSize({ width: 390, height: 844 })
+  await page.screenshot({ path: testInfo.outputPath('attempt-filter-mobile.png') })
+  await attemptsDialog.getByRole('button', { name: '閉じる' }).click()
+  await page.getByRole('link', { name: '資格一覧' }).click()
+  await page.getByRole('button', { name: '検索・絞り込み' }).click()
+  const reopenedOwnedDialog = page.getByRole('dialog', { name: '資格の検索・絞り込み' })
+  await expect(reopenedOwnedDialog.getByRole('button', { name: 'ITを解除' })).toBeVisible()
+  await expect(reopenedOwnedDialog.getByRole('button', { name: '合格を解除' })).toHaveCount(0)
+  await reopenedOwnedDialog.getByRole('button', { name: '閉じる' }).click()
+  await page.getByRole('link', { name: '受験履歴' }).click()
+  await page.getByRole('button', { name: '検索・絞り込み' }).click()
+  await expect(
+    page.getByRole('dialog', { name: '受験履歴の検索・絞り込み' }).getByRole('button', {
+      name: '合格を解除',
+    }),
+  ).toBeVisible()
+  await expect(
+    page.getByRole('dialog', { name: '受験履歴の検索・絞り込み' }).getByRole('button', {
+      name: 'ITを解除',
+    }),
+  ).toHaveCount(0)
+  await page.evaluate(() => {
+    window.history.pushState({}, '', '/qualifications')
+    window.dispatchEvent(new PopStateEvent('popstate'))
+  })
+  await expect(attemptsDialog).toHaveCount(0)
+  await expect(page.getByRole('heading', { name: '資格一覧' })).toBeVisible()
+})
+
 test('既存資格の結果は明示選択が必要で、未操作終了では破棄確認を出さない', async ({
   page,
   request,
