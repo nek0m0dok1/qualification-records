@@ -1380,13 +1380,6 @@ select {
   padding-top: 12px;
   margin-top: 4px;
 }
-.exam-actions {
-  margin: 0 0 16px;
-}
-.exam-actions button {
-  min-height: 46px;
-  padding-inline: 22px;
-}
 .restore-warning {
   margin: 14px 0;
   padding: 12px 14px;

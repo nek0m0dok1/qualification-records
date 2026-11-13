@@ -6,7 +6,7 @@ import { configured, rememberDevice } from './services/firebase'
 import { ui, closeDialog } from './state/ui'
 import { filters } from './state/ui'
 import { useRoute } from 'vue-router'
-import { TAGS } from './domain/model'
+import { TAGS, resultLabel } from './domain/model'
 import Modal from './components/Modal.vue'
 import Wizard from './components/Wizard.vue'
 import QualificationUpdateModal from './components/QualificationUpdateModal.vue'
@@ -31,6 +31,13 @@ watch(
       }, 4000)
   },
   { immediate: true },
+)
+watch(
+  () => route.path,
+  () => {
+    filterOpen.value = false
+    tagSearch.value = ''
+  },
 )
 onUnmounted(() => clearTimeout(messageTimer))
 function accountLogout() {
@@ -88,15 +95,25 @@ function accountLogout() {
           </div>
         </nav>
         <button
-          v-if="route.path === '/qualifications'"
+          v-if="route.path === '/qualifications' || route.path === '/exam-attempts'"
           type="button"
           class="secondary filter-open"
           :aria-expanded="filterOpen"
           @click="filterOpen = true"
         >
-          検索・絞り込み<span v-if="filters.owned.tags.length" class="filter-count">{{
-            filters.owned.tags.length
-          }}</span>
+          検索・絞り込み<span
+            v-if="
+              route.path === '/qualifications'
+                ? filters.owned.tags.length
+                : filters.attempts.results.length
+            "
+            class="filter-count"
+            >{{
+              route.path === '/qualifications'
+                ? filters.owned.tags.length
+                : filters.attempts.results.length
+            }}件</span
+          >
         </button>
       </aside>
       <div class="workspace-content">
@@ -175,20 +192,44 @@ function accountLogout() {
       </div>
     </Modal>
     <Modal
-      v-if="filterOpen && route.path === '/qualifications'"
+      v-if="filterOpen && (route.path === '/qualifications' || route.path === '/exam-attempts')"
       class="qualification-filter-dialog"
-      title="資格の検索・絞り込み"
+      :title="
+        route.path === '/qualifications' ? '資格の検索・絞り込み' : '受験履歴の検索・絞り込み'
+      "
       @close="filterOpen = false"
     >
-      <label
+      <label v-if="route.path === '/qualifications'"
         >資格名を検索<input
           v-model="filters.owned.search"
           type="search"
           placeholder="資格名の一部を入力"
       /></label>
-      <section class="selected-tags" aria-label="選択中のジャンル">
-        <h3>選択中のジャンル</h3>
-        <p v-if="!ownedFilter.tags.length" class="help">ジャンルは選択されていません</p>
+      <label v-else
+        >資格名を検索<input
+          v-model="filters.attempts.search"
+          type="search"
+          placeholder="資格名の一部を入力"
+      /></label>
+      <section
+        class="selected-tags"
+        :aria-label="route.path === '/qualifications' ? '選択中のジャンル' : '選択中の受験結果'"
+      >
+        <h3>{{ route.path === '/qualifications' ? '選択中のジャンル' : '選択中の受験結果' }}</h3>
+        <p
+          v-if="
+            route.path === '/qualifications'
+              ? !ownedFilter.tags.length
+              : !filters.attempts.results.length
+          "
+          class="help"
+        >
+          {{
+            route.path === '/qualifications'
+              ? 'ジャンルは選択されていません'
+              : '受験結果は選択されていません'
+          }}
+        </p>
         <div class="selected-tag-list">
           <span
             v-for="tag in TAGS.filter((item) => ownedFilter.tags.includes(item.id))"
@@ -204,13 +245,34 @@ function accountLogout() {
               ×
             </button>
           </span>
+          <template v-if="route.path === '/exam-attempts'">
+            <span v-for="result in filters.attempts.results" :key="result" class="selected-tag">
+              {{ resultLabel[result] }}
+              <button
+                type="button"
+                :aria-label="resultLabel[result] + 'を解除'"
+                @click="
+                  filters.attempts.results = filters.attempts.results.filter(
+                    (item) => item !== result,
+                  )
+                "
+              >
+                ×
+              </button>
+            </span>
+          </template>
         </div>
       </section>
-      <label
+      <label v-if="route.path === '/qualifications'"
         >ジャンルを検索<input v-model="tagSearch" type="search" placeholder="ジャンル名を入力"
       /></label>
-      <p class="help">選択したすべてのジャンルに一致</p>
-      <div class="dialog-tag-options" role="group" aria-label="ジャンル候補">
+      <p v-if="route.path === '/qualifications'" class="help">選択したすべてのジャンルに一致</p>
+      <div
+        v-if="route.path === '/qualifications'"
+        class="dialog-tag-options"
+        role="group"
+        aria-label="ジャンル候補"
+      >
         <button
           v-for="tag in visibleTags"
           :key="tag.id"
@@ -224,6 +286,22 @@ function accountLogout() {
           "
         >
           {{ tag.label }}
+        </button>
+      </div>
+      <div v-else class="dialog-tag-options" role="group" aria-label="受験結果候補">
+        <button
+          v-for="(label, value) in resultLabel"
+          :key="value"
+          type="button"
+          class="filter-chip"
+          :aria-pressed="filters.attempts.results.includes(value)"
+          @click="
+            filters.attempts.results = filters.attempts.results.includes(value)
+              ? filters.attempts.results.filter((result) => result !== value)
+              : [...filters.attempts.results, value]
+          "
+        >
+          {{ label }}
         </button>
       </div>
     </Modal>
