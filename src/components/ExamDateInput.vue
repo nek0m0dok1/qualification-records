@@ -243,7 +243,7 @@ watch(
       </label>
     </div>
     <div v-if="allowDay" class="date-precision-actions">
-      <button v-if="!dayEnabled" type="button" class="text-button" @click="addDay">
+      <button v-if="!dayEnabled" type="button" class="text-button add-day-button" @click="addDay">
         日も指定する
       </button>
       <button v-else type="button" class="text-button" @click="removeDay">年月のみにする</button>
