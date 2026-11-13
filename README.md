@@ -101,12 +101,12 @@ Tsumica（ツミカ）は、自分の資格と取得・更新年月、受験結�
 - EmulatorやSecurity Rulesのテストを使う場合：Java 21
 
 ```sh
-git clone https://github.com/nek0m0dok1/qualification-records.git
-cd qualification-records
+git clone https://github.com/nek0m0dok1/tsumica.git
+cd tsumica
 npm ci
 ```
 
-リポジトリ名・npmパッケージ名・Firebaseの内部識別子は、製品名とは別に `qualification-records` を引き続き使用します。
+リポジトリ名は `tsumica` です。npmパッケージ名とバックアップ形式名は `qualification-records`、ローカルEmulatorのプロジェクトIDは `demo-qualification-records` を引き続き使用します。
 
 続いて `.env.example` を `.env` にコピーします。OSに合うどちらかを実行してください。
 
