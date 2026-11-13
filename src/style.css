@@ -857,6 +857,16 @@ dd {
 .date-precision-actions {
   margin-top: 4px;
 }
+.date-precision-actions .add-day-button {
+  border: 1px solid #b7cbb9;
+  border-radius: 8px;
+  padding: 8px 12px;
+  background: #e8f0e8;
+  color: #234e47;
+}
+.date-precision-actions .add-day-button:hover {
+  background: #dce9dd;
+}
 
 .danger-button {
   background: #a73d36;
