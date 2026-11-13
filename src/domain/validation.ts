@@ -1,4 +1,6 @@
 import { TAGS, fail, type Records } from './model'
+export const MIN_DATE_YEAR = 1900
+export const MAX_DATE_YEAR = 2100
 export function formatDate(value: string): string {
   const [year, month, day] = value.split('-')
   return `${Number(year)}年${Number(month)}月${day ? `${Number(day)}日` : ''}`
@@ -11,10 +13,15 @@ export function validDate(value: unknown, dayAllowed = false): value is string {
   )
     return false
   const [year, month, day] = value.split('-').map(Number)
-  if (year < 1 || month < 1 || month > 12) return false
+  if (year < 1 || year > 9999 || month < 1 || month > 12) return false
   if (day === undefined) return true
   const leap = year % 4 === 0 && (year % 100 !== 0 || year % 400 === 0)
   return day >= 1 && day <= [31, leap ? 29 : 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31][month - 1]
+}
+export function validInputDate(value: unknown, dayAllowed = false): value is string {
+  if (!validDate(value, dayAllowed)) return false
+  const year = Number(value.slice(0, 4))
+  return year >= MIN_DATE_YEAR && year <= MAX_DATE_YEAR
 }
 const idPattern = /^[A-Za-z0-9_-]{1,128}$/
 export const validId = (v: unknown): v is string => typeof v === 'string' && idPattern.test(v)

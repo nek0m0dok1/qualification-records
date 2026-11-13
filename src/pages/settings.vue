@@ -213,7 +213,6 @@ async function retryRestoreStateRead() {
       <div>
         <p class="eyebrow">SETTINGS & BACKUP</p>
         <h1>設定・バックアップ</h1>
-        <p>記録を守り、必要なときに戻せるように。</p>
       </div>
     </div>
     <div class="settings-grid">
@@ -239,7 +238,7 @@ async function retryRestoreStateRead() {
       </section>
       <section class="settings-card restore-card">
         <h2>JSONから復元する</h2>
-        <p>ファイルを検証してから、現在の記録を全置換します。</p>
+        <p class="restore-warning">現在の記録をすべて上書きします</p>
         <label
           >バックアップファイル<input
             type="file"
@@ -255,7 +254,9 @@ async function retryRestoreStateRead() {
           <p class="help">
             書き出し日時：{{ new Date(candidate.exportedAt).toLocaleString('ja-JP') }}
           </p>
-          <button :disabled="disabled" @click="restore">内容を確認して全置換</button>
+          <button class="danger-button" :disabled="disabled" @click="restore">
+            内容を確認して全置換
+          </button>
         </div>
         <p v-if="progress" role="status">{{ progress }}</p>
         <p v-if="pending" class="notice error" role="status">

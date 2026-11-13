@@ -43,7 +43,7 @@ async function signIn(page: Page, email: string, password: string) {
   await page.getByLabel('メールアドレス').fill(email)
   await page.getByLabel('パスワード', { exact: true }).fill(password)
   await page.getByRole('button', { name: 'ログイン' }).click()
-  await expect(page.getByRole('heading', { name: 'あなたの資格' })).toBeVisible()
+  await expect(page.getByRole('heading', { name: '資格一覧' })).toBeVisible()
 }
 
 test('廃止タグの新規選択を隠し、過去タグの表示・検索・訂正・復元を保つ', async ({
@@ -116,7 +116,8 @@ test('廃止タグの新規選択を隠し、過去タグの表示・検索・�
   const card = page.getByRole('button', { name: /廃止タグつきの行政資格/ })
   await expect(card).toBeVisible()
   const navigation = page.getByRole('navigation', { name: '主要画面' })
-  await navigation.getByRole('button', { name: /検索・絞り込み/ }).click()
+  await expect(navigation.getByRole('button', { name: /検索・絞り込み/ })).toHaveCount(0)
+  await page.getByRole('button', { name: /検索・絞り込み/ }).click()
   const filters = page.getByRole('dialog', { name: '資格の検索・絞り込み' })
   await filters.getByLabel('資格名を検索').fill('行政資格')
   await expect(card).toBeVisible()

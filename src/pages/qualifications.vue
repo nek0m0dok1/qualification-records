@@ -17,8 +17,7 @@ const selected = ref('')
     <div class="page-heading">
       <div>
         <p class="eyebrow">MY QUALIFICATIONS</p>
-        <h1>あなたの資格</h1>
-        <p>取得の記録を、ひと目で。</p>
+        <h1>資格一覧</h1>
       </div>
       <span class="count">{{ session.records.acquisitions.length }}<small>件の資格</small></span>
     </div>
