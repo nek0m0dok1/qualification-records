@@ -54,6 +54,49 @@ test('年月日コントロールの範囲・暦日・外部クリアが同期�
   await expect(page.getByLabel('受験年月（日は任意）の日')).toHaveCount(0)
 })
 
+test('日を未選択の年月変更では日指定を保ち、明示解除まで送信不可にする', async ({ page }) => {
+  await page.goto('/tests/fixtures/exam-date-input.html')
+
+  const form = page.locator('form')
+  const value = page.getByRole('textbox', { name: '受験年月（日は任意）', exact: true })
+  const year = page.getByLabel('受験年月（日は任意）の年')
+  const month = page.getByLabel('受験年月（日は任意）の月')
+  const day = page.getByLabel('受験年月（日は任意）の日')
+  const removeDay = page.getByRole('button', { name: '年月のみにする' })
+
+  await expect(value).toHaveValue('2024-05-12')
+  await page.evaluate(() => {
+    if (window.examDateFixture) window.examDateFixture.value.value = '2024-05'
+  })
+  await expect(value).toHaveValue('2024-05')
+  await page.getByRole('button', { name: '日も指定する' }).click()
+  await expect(day).toHaveValue('')
+  await month.selectOption('06')
+  await expect(value).toHaveValue('2024-06')
+  await expect(day).toHaveValue('')
+  await expect(removeDay).toBeVisible()
+  expect(await form.evaluate((element: HTMLFormElement) => element.checkValidity())).toBe(false)
+  await day.selectOption('15')
+  await expect(value).toHaveValue('2024-06-15')
+
+  await page.evaluate(() => {
+    if (window.examDateFixture) window.examDateFixture.value.value = '2024-05'
+  })
+  await expect(value).toHaveValue('2024-05')
+  await page.getByRole('button', { name: '日も指定する' }).click()
+  await year.fill('2025')
+  await year.press('Tab')
+  await expect(value).toHaveValue('2025-05')
+  await expect(day).toHaveValue('')
+  await expect(removeDay).toBeVisible()
+  await month.selectOption('06')
+  await expect(value).toHaveValue('2025-06')
+  await expect(day).toHaveValue('')
+  expect(await form.evaluate((element: HTMLFormElement) => element.checkValidity())).toBe(false)
+  await day.selectOption('15')
+  await expect(value).toHaveValue('2025-06-15')
+})
+
 declare global {
   interface Window {
     examDateFixture?: {

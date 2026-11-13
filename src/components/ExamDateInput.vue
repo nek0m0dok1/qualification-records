@@ -15,6 +15,7 @@ const year = ref('')
 const month = ref('')
 const day = ref('')
 const dayEnabled = ref(false)
+const pendingLocalEcho = ref<{ from: string; to: string } | null>(null)
 
 const legacyValueAllowed = computed(
   () => draftValue.value === props.legacyValue && validDate(props.legacyValue, props.allowDay),
@@ -59,12 +60,12 @@ const selectedDayIsInvalid = computed(() => {
 })
 const months = Array.from({ length: 12 }, (_, index) => index + 1)
 
-function syncParts(value: string) {
+function syncParts(value: string, preserveDayMode = false) {
   if (!value) {
     year.value = ''
     month.value = ''
     day.value = ''
-    dayEnabled.value = false
+    if (!preserveDayMode) dayEnabled.value = false
     return
   }
 
@@ -73,7 +74,7 @@ function syncParts(value: string) {
     year.value = ''
     month.value = ''
     day.value = ''
-    dayEnabled.value = false
+    if (!preserveDayMode) dayEnabled.value = false
     return
   }
 
@@ -83,19 +84,28 @@ function syncParts(value: string) {
       ? String(Number(match[2])).padStart(2, '0')
       : ''
   day.value = match[3] ? String(Number(match[3])).padStart(2, '0') : ''
-  dayEnabled.value = Boolean(match[3])
+  dayEnabled.value = Boolean(match[3]) || (preserveDayMode && dayEnabled.value)
+}
+
+function emitLocalValue(value: string) {
+  if (value === props.modelValue) {
+    pendingLocalEcho.value = null
+    return
+  }
+  pendingLocalEcho.value = { from: props.modelValue, to: value }
+  emit('update:modelValue', value)
 }
 
 function setDraft(value: string) {
   draftValue.value = value
-  if (draftIsValid.value) emit('update:modelValue', value)
+  if (draftIsValid.value) emitLocalValue(value)
 }
 
 function readRawValue(event: Event) {
   const value = (event.target as HTMLInputElement).value
   draftValue.value = value
-  syncParts(value)
-  if (draftIsValid.value) emit('update:modelValue', value)
+  syncParts(value, true)
+  if (draftIsValid.value) emitLocalValue(value)
 }
 
 function composeValue() {
@@ -129,7 +139,14 @@ function addDay() {
 
 watch(
   () => props.modelValue,
-  (value) => {
+  (value, oldValue) => {
+    const localEcho = pendingLocalEcho.value
+    if (localEcho && localEcho.from === oldValue && localEcho.to === value) {
+      pendingLocalEcho.value = null
+      draftValue.value = value
+      return
+    }
+    pendingLocalEcho.value = null
     draftValue.value = value
     syncParts(value)
   },
