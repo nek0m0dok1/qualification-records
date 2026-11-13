@@ -43,7 +43,7 @@ function accountLogout() {
     <header class="app-header">
       <RouterLink to="/qualifications" class="brand"
         ><span class="brand-mark">資格</span
-        ><span>資格ノート<small>取得の記録を、いつでも手元に。</small></span></RouterLink
+        ><span>Tsumica<small>取得の記録を、いつでも手元に。</small></span></RouterLink
       ><button
         v-if="session.user"
         type="button"
@@ -58,7 +58,7 @@ function accountLogout() {
     </header>
     <main v-if="!configured" class="setup">
       <p class="eyebrow">SETUP</p>
-      <h1>資格ノートへようこそ</h1>
+      <h1>Tsumicaへようこそ</h1>
       <p>資格の取得年月と受験履歴を、必要なときにすぐ確認できます。</p>
       <p>
         この環境はまだFirebaseに接続していません。READMEの手順に沿って設定すると利用を開始できます。
