@@ -207,4 +207,4 @@ E2Eの初回実行前は `npx playwright install chromium` でブラウザーを
 - Variables：`FIREBASE_PROJECT_ID`、`VITE_FIREBASE_API_KEY`、`VITE_FIREBASE_AUTH_DOMAIN`、`VITE_FIREBASE_APP_ID`
 - Secret：`FIREBASE_SERVICE_ACCOUNT`（対象プロジェクトのサービスアカウント情報。READMEや `.env` に貼り付けません）
 
-`FIREBASE_PROJECT_ID` が空なら公開ジョブはスキップします。設定が不完全なら公開に失敗するため、変数だけ設定して公開準備が完了したとは扱わないでください。公開時は `production` 環境を使用します。Firestore Rules・インデックスの適用はHosting公開とは別に管理します。
+`FIREBASE_PROJECT_ID` が空なら公開ジョブはスキップします。設定が不足すると、公開に失敗する場合や、公開に成功してもアプリが設定案内画面となり記録機能を利用できない場合があります。公開成功だけでは設定が完全であることを確認できないため、公開先で登録・ログイン・記録操作も確認してください。公開時は `production` 環境を使用します。Firestore Rules・インデックスの適用はHosting公開とは別に管理します。
