@@ -9,6 +9,7 @@ import { useRoute } from 'vue-router'
 import { TAGS } from './domain/model'
 import Modal from './components/Modal.vue'
 import Wizard from './components/Wizard.vue'
+import QualificationUpdateModal from './components/QualificationUpdateModal.vue'
 import AuthForm from './components/AuthForm.vue'
 const sw = useRegisterSW({ immediate: true })
 const blocked = computed(() => session.cacheDeletionRequired)
@@ -146,7 +147,8 @@ function accountLogout() {
     <p v-if="session.message" class="notice success save-toast" role="status">
       {{ session.message }}
     </p>
-    <Wizard v-if="ui.wizardOpen" />
+    <QualificationUpdateModal v-if="ui.wizardOpen && ui.wizardQualificationId" />
+    <Wizard v-else-if="ui.wizardOpen" />
     <Modal
       v-if="accountOpen && session.user && !blocked"
       title="アカウント"

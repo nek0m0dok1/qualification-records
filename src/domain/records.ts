@@ -7,7 +7,7 @@ import {
   type Qualification,
   type Acquisition,
 } from './model'
-import { validateRecords, validDate } from './validation'
+import { validateRecords, validInputDate } from './validation'
 export interface Registration {
   qualification: Qualification
   existing: boolean
@@ -34,7 +34,8 @@ export function register(records: Records, input: Registration): Records {
   }
   const include = input.result !== 'passed' || input.includeAttempt
   if (include) {
-    if (!validDate(input.examDate, true)) fail('受験年月を入力してください。日は任意です。')
+    if (!validInputDate(input.examDate, true))
+      fail('受験年月は1900年から2100年の範囲で入力してください。日は任意です。')
     next.examAttempts.push({
       id: input.attemptId,
       qualificationId: q.id,
@@ -52,7 +53,7 @@ function applyPass(
   month: string | undefined,
   attemptId?: string,
 ) {
-  if (!validDate(month)) fail('取得・更新年月を入力してください。')
+  if (!validInputDate(month)) fail('取得・更新年月は1900年から2100年の範囲で入力してください。')
   const a = records.acquisitions.find((x) => x.qualificationId === qualificationId)
   if (!a) {
     records.acquisitions.push({
@@ -106,6 +107,8 @@ export function editAttempt(
   const next = structuredClone(records)
   const a = next.examAttempts.find((x) => x.id === id)
   if (!a) fail('受験履歴が見つかりません。')
+  if (examDate !== a.examDate && !validInputDate(examDate, true))
+    fail('受験年月は1900年から2100年の範囲で入力してください。日は任意です。')
   if (a.result !== result) {
     if (!consent) fail('変更を取り消しました。')
     if (a.result === 'passed') detach(next, id)
@@ -150,8 +153,14 @@ export function editQualification(
     fail('選択できない固定タグは追加できません。')
   next.qualifications[index] = qualification
   const a = next.acquisitions.find((x) => x.qualificationId === qualification.id)
-  if (a && acquiredMonth !== undefined) a.acquiredMonth = acquiredMonth
-  if (a?.renewal && renewedMonth !== undefined) a.renewal.month = renewedMonth
+  if (a && acquiredMonth !== undefined && acquiredMonth !== a.acquiredMonth) {
+    if (!validInputDate(acquiredMonth)) fail('取得年月は1900年から2100年の範囲で入力してください。')
+    a.acquiredMonth = acquiredMonth
+  }
+  if (a?.renewal && renewedMonth !== undefined && renewedMonth !== a.renewal.month) {
+    if (!validInputDate(renewedMonth)) fail('更新年月は1900年から2100年の範囲で入力してください。')
+    a.renewal.month = renewedMonth
+  }
   return checked(next)
 }
 export function cancelLatestRenewal(

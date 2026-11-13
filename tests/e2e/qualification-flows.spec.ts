@@ -49,11 +49,77 @@ async function createVerifiedAccount(request: APIRequestContext, email: string, 
   return { uid: localId as string, idToken: idToken as string }
 }
 
+async function replaceEmulatorRecord(
+  request: APIRequestContext,
+  input: {
+    uid: string
+    idToken: string
+    datasetId: string
+    collection: 'acquisitions' | 'examAttempts'
+    id: string
+    fields: Record<string, unknown>
+  },
+) {
+  const documentsPath =
+    'http://127.0.0.1:8080/v1/projects/demo-qualification-records/databases/(default)/documents'
+  const rootPath = `${documentsPath}/users/${input.uid}`
+  const headers = { Authorization: `Bearer ${input.idToken}` }
+  const [rootResponse, datasetResponse] = await Promise.all([
+    request.get(rootPath, { headers }),
+    request.get(`${rootPath}/datasets/${input.datasetId}`, { headers }),
+  ])
+  expect(rootResponse.ok(), await rootResponse.text()).toBeTruthy()
+  expect(datasetResponse.ok(), await datasetResponse.text()).toBeTruthy()
+  const rootName = `projects/demo-qualification-records/databases/(default)/documents/users/${input.uid}`
+  const rootFields = (await rootResponse.json()).fields as Record<string, unknown>
+  const datasetFields = (await datasetResponse.json()).fields as Record<string, unknown>
+  const revision = Number((rootFields.revision as { integerValue: string }).integerValue)
+  const recordPath = `${rootPath}/datasets/${input.datasetId}/${input.collection}/${input.id}`
+  const recordName = `${rootName}/datasets/${input.datasetId}/${input.collection}/${input.id}`
+  const response = await request.post(`${documentsPath}:commit`, {
+    headers,
+    data: {
+      writes: [
+        { update: { name: recordName, fields: input.fields } },
+        {
+          update: {
+            name: `${rootName}/datasets/${input.datasetId}`,
+            fields: datasetFields,
+          },
+        },
+        {
+          update: {
+            name: rootName,
+            fields: {
+              activeDatasetId: rootFields.activeDatasetId,
+              revision: { integerValue: String(revision + 1) },
+            },
+          },
+        },
+      ],
+    },
+  })
+  expect(response.ok(), await response.text()).toBeTruthy()
+  const verification = await request.get(recordPath, { headers })
+  expect(verification.ok(), await verification.text()).toBeTruthy()
+  expect((await verification.json()).fields).toEqual(input.fields)
+}
+
+async function refreshPageRecords(page: Page) {
+  const fetchedAt = page.locator('.status-bar > span > small')
+  const previousFetch = await fetchedAt.innerText()
+  await page.waitForTimeout(1100)
+  await page.getByRole('button', { name: '記録を再取得' }).click()
+  await expect(fetchedAt).not.toHaveText(previousFetch)
+}
+
 async function registerQualification(page: Page, name: string, month: string) {
   await page.getByRole('button', { name: '＋ 記録を追加' }).click()
+  await expect(page.getByText('STEP 1 / 4')).toBeVisible()
   await page.getByLabel('新資格の登録').check()
   await page.getByRole('button', { name: '次へ' }).click()
   await page.getByRole('textbox', { name: '資格名' }).fill(name)
+  await page.getByLabel('受験結果').selectOption('passed')
   await page.getByRole('button', { name: '次へ' }).click()
   await page.getByLabel('あなたの資格のみ登録する').check()
   await page.getByRole('button', { name: '取得年月カレンダーを開く', exact: true }).click()
@@ -70,6 +136,7 @@ async function registerQualification(page: Page, name: string, month: string) {
 
 async function addRenewalFromDetail(page: Page, month: string) {
   await page.getByRole('button', { name: '更新・記録を追加' }).click()
+  await page.getByLabel('受験結果').selectOption('passed')
   await page.getByRole('button', { name: '次へ' }).click()
   await page.getByRole('button', { name: '次へ' }).click()
   await page.getByLabel('あなたの資格のみ登録する').check()
@@ -77,6 +144,259 @@ async function addRenewalFromDetail(page: Page, month: string) {
   await page.getByRole('button', { name: '次へ' }).click()
   await page.getByRole('button', { name: '記録を保存' }).click()
 }
+
+test('既存資格の結果は明示選択が必要で、未操作終了では破棄確認を出さない', async ({
+  page,
+  request,
+}) => {
+  test.setTimeout(90_000)
+  await waitForAuthEmulator(request)
+  const email = `result-selection-${Date.now()}@example.test`
+  const password = 'e2e-password-123'
+  await createVerifiedAccount(request, email, password)
+
+  await page.goto('/login')
+  await page.getByLabel('メールアドレス').fill(email)
+  await page.getByLabel('パスワード', { exact: true }).fill(password)
+  await page.getByLabel('ログイン状態を記憶する').check()
+  await page.getByRole('button', { name: 'ログイン' }).click()
+  await expect(page.getByRole('heading', { name: '資格一覧' })).toBeVisible()
+  await registerQualification(page, '結果未選択の回帰確認', '1900-04')
+
+  await page.getByRole('button', { name: /結果未選択の回帰確認/ }).click()
+  await page.getByRole('button', { name: '更新・記録を追加' }).click()
+  const wizard = page.getByRole('dialog', { name: '資格・受験の記録' })
+  await expect(wizard.getByText('STEP 1 / 3')).toBeVisible()
+  await expect(wizard.locator('.steps li')).toHaveText(['資格・結果', '年月', '確認'])
+  await expect(wizard.getByText('対象', { exact: true })).toHaveCount(0)
+  await expect(wizard.getByRole('button', { name: '戻る' })).toHaveCount(0)
+  const result = wizard.getByLabel('受験結果')
+  const nextButton = wizard.getByRole('button', { name: '次へ' })
+  await expect(result).toHaveValue('')
+  await expect(result.locator('option').first()).toHaveText('選択してください')
+  await expect(result).toHaveAttribute('required', '')
+  await expect(nextButton).toBeDisabled()
+  await wizard
+    .locator('form')
+    .evaluate((form) =>
+      form.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true })),
+    )
+  await expect(wizard.getByText('受験結果を選択してください。')).toBeVisible()
+  await expect(wizard.getByText('STEP 1 / 3')).toBeVisible()
+  await expect(wizard.getByText('この内容で保存します')).toHaveCount(0)
+  await wizard.locator('header').getByRole('button', { name: '閉じる' }).click()
+  await expect(page.getByRole('dialog')).toHaveCount(0)
+
+  await page.getByRole('button', { name: /結果未選択の回帰確認/ }).click()
+  await page.getByRole('button', { name: '更新・記録を追加' }).click()
+  const reopened = page.getByRole('dialog', { name: '資格・受験の記録' })
+  await reopened.getByLabel('受験結果').selectOption('passed')
+  await reopened.getByRole('button', { name: '次へ' }).click()
+  await expect(reopened.getByText('STEP 2 / 3')).toBeVisible()
+  await reopened.getByRole('button', { name: '戻る' }).click()
+  await expect(reopened.getByText('STEP 1 / 3')).toBeVisible()
+  await expect(reopened.getByRole('button', { name: '戻る' })).toHaveCount(0)
+  await reopened.getByRole('button', { name: '次へ' }).click()
+  await reopened.getByLabel('あなたの資格のみ登録する').check()
+  const renewalMonth = reopened.getByRole('textbox', { name: '更新年月', exact: true })
+  await renewalMonth.fill('2101-05')
+  await expect(reopened.getByRole('alert')).toContainText('1900年から2100年')
+  await reopened.getByRole('button', { name: '次へ' }).click()
+  await renewalMonth.press('Enter')
+  await expect(reopened.getByText('STEP 2 / 3')).toBeVisible()
+  await reopened.getByRole('button', { name: '更新年月カレンダーを開く' }).click()
+  await reopened.locator('.target-summary').click()
+  await expect(renewalMonth).toHaveValue('2101-05')
+  await expect(reopened.getByText('STEP 2 / 3')).toBeVisible()
+  await renewalMonth.fill('not-a-date')
+  await reopened.getByRole('button', { name: '更新年月カレンダーを開く' }).click()
+  await reopened.locator('.target-summary').click()
+  await expect(renewalMonth).toHaveValue('not-a-date')
+  await reopened.getByRole('button', { name: '更新年月カレンダーを開く' }).click()
+  await page.keyboard.press('Escape')
+  await expect(renewalMonth).toHaveValue('not-a-date')
+  await reopened.getByRole('button', { name: '次へ' }).click()
+  await expect(reopened.getByText('STEP 2 / 3')).toBeVisible()
+  await renewalMonth.fill('10000-01')
+  await expect(reopened.getByRole('alert')).toContainText('1900年から2100年')
+  await reopened.getByRole('button', { name: '次へ' }).click()
+  await expect(reopened.getByText('STEP 2 / 3')).toBeVisible()
+  await reopened.getByRole('button', { name: '更新年月カレンダーを開く' }).click()
+  await reopened.getByLabel('年', { exact: true }).selectOption('2100')
+  await reopened.getByLabel('月', { exact: true }).selectOption('5')
+  await reopened.locator('.target-summary').click()
+  await expect(renewalMonth).toHaveValue('2100-05')
+  await expect(reopened.getByRole('alert')).toHaveCount(0)
+  await reopened.getByRole('button', { name: '次へ' }).click()
+  await expect(reopened.getByText('STEP 3 / 3')).toBeVisible()
+  await reopened.getByRole('button', { name: '記録を保存' }).click()
+  await expect(reopened).toHaveCount(0)
+  await expect(page.getByRole('button', { name: /結果未選択の回帰確認/ })).toBeVisible()
+  await page.getByRole('button', { name: /結果未選択の回帰確認/ }).click()
+  const qualificationDetail = page.getByRole('dialog', { name: '結果未選択の回帰確認' })
+  await expect(qualificationDetail.getByText('1900年4月', { exact: true })).toBeVisible()
+  await expect(qualificationDetail.getByText('2100年5月', { exact: true })).toBeVisible()
+})
+
+test('範囲外の既存年月と受験日は訂正中に保持し、明示選択で置き換えられる', async ({
+  page,
+  request,
+}) => {
+  test.setTimeout(90_000)
+  await waitForAuthEmulator(request)
+  const email = `legacy-date-${Date.now()}@example.test`
+  const password = 'e2e-password-123'
+  const account = await createVerifiedAccount(request, email, password)
+
+  await page.goto('/login')
+  await page.getByLabel('メールアドレス').fill(email)
+  await page.getByLabel('パスワード', { exact: true }).fill(password)
+  await page.getByLabel('ログイン状態を記憶する').check()
+  await page.getByRole('button', { name: 'ログイン' }).click()
+  await expect(page.getByRole('heading', { name: '資格一覧' })).toBeVisible()
+  await registerQualification(page, 'レガシー年月の訂正確認', '2020-04')
+
+  const rootPath = `http://127.0.0.1:8080/v1/projects/demo-qualification-records/databases/(default)/documents/users/${account.uid}`
+  const authHeaders = { Authorization: `Bearer ${account.idToken}` }
+  const rootResponse = await request.get(rootPath, { headers: authHeaders })
+  expect(rootResponse.ok(), await rootResponse.text()).toBeTruthy()
+  const datasetId = (await rootResponse.json()).fields.activeDatasetId.stringValue as string
+  const acquisitionPath = `${rootPath}/datasets/${datasetId}/acquisitions`
+  const acquisitionsResponse = await request.get(acquisitionPath, { headers: authHeaders })
+  expect(acquisitionsResponse.ok(), await acquisitionsResponse.text()).toBeTruthy()
+  const acquisitionDocuments = (await acquisitionsResponse.json()).documents as {
+    name: string
+    fields: { qualificationId: { stringValue: string } }
+  }[]
+  const qualificationId = acquisitionDocuments[0].fields.qualificationId.stringValue
+  const acquisitionId = acquisitionDocuments[0].name.split('/').at(-1)!
+  await replaceEmulatorRecord(request, {
+    uid: account.uid,
+    idToken: account.idToken,
+    datasetId,
+    collection: 'acquisitions',
+    id: acquisitionId,
+    fields: {
+      qualificationId: { stringValue: qualificationId },
+      acquiredMonth: { stringValue: '1899-01' },
+    },
+  })
+  await refreshPageRecords(page)
+  await page.getByRole('button', { name: /レガシー年月の訂正確認/ }).click()
+
+  const detail = page.getByRole('dialog', { name: 'レガシー年月の訂正確認' })
+  await detail.getByRole('button', { name: '情報を訂正' }).click()
+  const acquisitionMonth = page.getByRole('textbox', { name: '取得年月', exact: true })
+  await expect(acquisitionMonth).toHaveValue('1899-01')
+  const acquisitionCalendar = page.getByRole('button', {
+    name: '取得年月カレンダーを開く',
+  })
+  await acquisitionCalendar.click()
+  await page.keyboard.press('Escape')
+  await expect(acquisitionMonth).toHaveValue('1899-01')
+  await acquisitionCalendar.click()
+  await acquisitionCalendar.click()
+  await expect(acquisitionMonth).toHaveValue('1899-01')
+  await acquisitionCalendar.click()
+  await page.getByRole('textbox', { name: '資格名' }).focus()
+  await expect(acquisitionMonth).toHaveValue('1899-01')
+  await page.getByRole('textbox', { name: '資格名' }).fill('訂正後のレガシー年月資格')
+  await page.getByRole('button', { name: '訂正を保存' }).click()
+  const updatedDetail = page.getByRole('dialog', { name: '訂正後のレガシー年月資格' })
+  await expect(updatedDetail.getByText('1899年1月', { exact: true })).toBeVisible()
+
+  await updatedDetail.getByRole('button', { name: '情報を訂正' }).click()
+  const updatedAcquisitionMonth = page.getByRole('textbox', {
+    name: '取得年月',
+    exact: true,
+  })
+  await updatedAcquisitionMonth.fill('1898-12')
+  await expect(page.getByRole('alert')).toContainText('1900年から2100年')
+  await page.getByRole('button', { name: '訂正を保存' }).click()
+  await expect(page.getByRole('dialog', { name: '資格情報の訂正' })).toBeVisible()
+  await updatedAcquisitionMonth.fill('1899-01')
+  await page.getByRole('button', { name: '取得年月カレンダーを開く' }).click()
+  const calendar = page.getByRole('group', { name: '取得年月カレンダー', exact: true })
+  await calendar.getByLabel('年', { exact: true }).selectOption('1900')
+  await calendar.getByLabel('月', { exact: true }).selectOption('1')
+  await page.getByRole('textbox', { name: '資格名' }).focus()
+  await expect(updatedAcquisitionMonth).toHaveValue('1900-01')
+  await page.getByRole('button', { name: '訂正を保存' }).click()
+  await expect(
+    page
+      .getByRole('dialog', { name: '訂正後のレガシー年月資格' })
+      .getByText('1900年1月', { exact: true }),
+  ).toBeVisible()
+
+  await page.getByRole('button', { name: '更新・記録を追加' }).click()
+  const update = page.getByRole('dialog', { name: '資格・受験の記録' })
+  await update.getByLabel('受験結果').selectOption('failed')
+  await update.getByRole('button', { name: '次へ' }).click()
+  await update
+    .getByRole('textbox', { name: '受験年月（日は任意）', exact: true })
+    .fill('2024-05-12')
+  await update.getByRole('button', { name: '次へ' }).click()
+  await update.getByRole('button', { name: '記録を保存' }).click()
+  await expect(update).toHaveCount(0)
+
+  const attemptsPath = `${rootPath}/datasets/${datasetId}/examAttempts`
+  const attemptsResponse = await request.get(attemptsPath, { headers: authHeaders })
+  expect(attemptsResponse.ok(), await attemptsResponse.text()).toBeTruthy()
+  const attemptDocuments = ((await attemptsResponse.json()).documents ?? []) as {
+    name: string
+    fields: {
+      qualificationId: { stringValue: string }
+      result: { stringValue: string }
+    }
+  }[]
+  expect(attemptDocuments).toHaveLength(1)
+  const attemptDocument = attemptDocuments[0]
+  const attemptId = attemptDocument.name.split('/').at(-1)!
+  await replaceEmulatorRecord(request, {
+    uid: account.uid,
+    idToken: account.idToken,
+    datasetId,
+    collection: 'examAttempts',
+    id: attemptId,
+    fields: {
+      qualificationId: attemptDocument.fields.qualificationId,
+      examDate: { stringValue: '2101-03-09' },
+      result: attemptDocument.fields.result,
+    },
+  })
+  await refreshPageRecords(page)
+  await page.goto('/exam-attempts')
+  const attemptCard = page.getByRole('button', { name: /2101年3月9日/ })
+  await expect(attemptCard).toBeVisible()
+  await attemptCard.click()
+  const attemptDetail = page.getByRole('dialog', { name: '訂正後のレガシー年月資格' })
+  await attemptDetail.getByRole('button', { name: '訂正', exact: true }).click()
+  const attemptEdit = page.getByRole('dialog', { name: '受験履歴の訂正' })
+  const attemptDate = attemptEdit.getByRole('textbox', {
+    name: '受験年月（日は任意）',
+    exact: true,
+  })
+  await expect(attemptDate).toHaveValue('2101-03-09')
+  await attemptDate.fill('2101-03-10')
+  await expect(attemptEdit.getByRole('alert')).toContainText('1900年から2100年')
+  await attemptEdit.getByRole('button', { name: '訂正を保存' }).click()
+  await expect(attemptEdit).toBeVisible()
+  await attemptDate.fill('2101-03-09')
+  const attemptCalendar = attemptEdit.getByRole('button', {
+    name: '受験年月（日は任意）カレンダーを開く',
+  })
+  await attemptCalendar.click()
+  await page.keyboard.press('Escape')
+  await expect(attemptDate).toHaveValue('2101-03-09')
+  await attemptCalendar.click()
+  await attemptCalendar.click()
+  await expect(attemptDate).toHaveValue('2101-03-09')
+  await attemptCalendar.click()
+  await attemptEdit.getByLabel('受験結果').focus()
+  await expect(attemptDate).toHaveValue('2101-03-09')
+  await attemptEdit.getByRole('button', { name: '訂正を保存' }).click()
+  await expect(page.getByRole('button', { name: /2101年3月9日/ })).toBeVisible()
+})
 
 test('主要フロー: 取り消し後の訂正年月と自己削除・別画面からの削除', async ({
   page,
@@ -364,6 +684,7 @@ test('主要フロー: 取り消し後の訂正年月と自己削除・別画面
   const card = page.getByRole('button', { name: /E2E削除資格/ })
   await card.click()
   await page.getByRole('button', { name: '更新・記録を追加' }).click()
+  await page.getByLabel('受験結果').selectOption('passed')
   await page.getByRole('button', { name: '次へ' }).click()
   await page.getByRole('button', { name: '次へ' }).click()
   await page.getByLabel('あなたの資格のみ登録する').check()

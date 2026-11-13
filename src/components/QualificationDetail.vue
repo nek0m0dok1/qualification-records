@@ -125,10 +125,16 @@ async function close() {
         </div>
       </fieldset>
       <label>メモ<textarea v-model="draft.memo" maxlength="5000" rows="4" /></label
-      ><ExamDateInput v-if="a" v-model="draft.acquiredMonth" label="取得年月" /><ExamDateInput
+      ><ExamDateInput
+        v-if="a"
+        v-model="draft.acquiredMonth"
+        label="取得年月"
+        :legacy-value="a.acquiredMonth"
+      /><ExamDateInput
         v-if="a?.renewal"
         v-model="draft.renewedMonth"
         label="最新の更新年月"
+        :legacy-value="a.renewal.month"
       />
       <div class="actions">
         <button type="button" class="secondary" @click="editing = false">訂正を取り消す</button

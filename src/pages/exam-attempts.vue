@@ -139,7 +139,12 @@ async function remove(id: string) {
       @delete-attempt="remove"
     /><Modal v-if="editingId" title="受験履歴の訂正" :busy="session.busy" @close="editingId = ''"
       ><form @submit.prevent="save">
-        <ExamDateInput v-model="date" label="受験年月（日は任意）" allow-day /><label
+        <ExamDateInput
+          v-model="date"
+          label="受験年月（日は任意）"
+          allow-day
+          :legacy-value="editing?.examDate"
+        /><label
           >受験結果<span class="required-marker" aria-hidden="true"></span
           ><select v-model="result">
             <option v-for="(label, value) in resultLabel" :key="value" :value="value">
